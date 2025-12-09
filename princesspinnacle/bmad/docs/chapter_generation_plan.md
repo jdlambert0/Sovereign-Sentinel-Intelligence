@@ -21,6 +21,7 @@ The generation and editing process will proceed Act-by-Act. Each Act will underg
 This process automates the initial prose generation for each chapter within the current Act.
 
 *   **Execution Order:** Chapters will be processed sequentially (Chapter 1, then Chapter 2, etc.) within the current Act.
+*   **Previous Chapter Verification:** Before generating Chapter N (for N > 1), verify that Chapter N-1 has been successfully created and saved in its final polished form (`chapter_YYY-1_Title.md`). If N-1 is an Interlude, verify the previous Interlude or Chapter. If verification fails, halt and report.
 *   **BMAD Sync Check (Chapter-level):**
     *   **Action:** Before generating Chapter N, the `Write Agent` will automatically validate its specific chapter outline (from `chapters-actX.md`) against core `GEMINI.md` directives (e.g., correct character names, MaidKnight aesthetic, Evolution Rhythm structure).
     *   **Behavior on Discrepancy:** If critical discrepancies are found, the agent will **halt generation for that specific chapter**, log the error, and notify the human reviewer for intervention. It *may* proceed with other chapters if not interdependent.
