@@ -1,0 +1,11 @@
+# Chapter 1: The Silver Cage
+
+Air in grand hall hummed. Low, constant frequency. Resonated. Perfect, unyielding order. Aethelgard, 'The Silver Judge,' moved. Precision. Robotic. Silver armor gleamed. Harsh, efficient lights. Every step calculated. Every movement economical. Internal metrics pulsed. Satisfaction. Optimal environment. Minimal variables. Predictable outcomes. Her domain. Meticulously curated space. Chaos dared not intrude. Every element served precise, logical function. She craved alignment. Craved eradication. Anything deviating. From perfect design.
+
+Her Soul Arm, *The Tuning Fork*, rested. Against her hip. Polished prongs reflected stark light. Extension of her purpose. Tool to restore harmony. Correct discord. With it, she sought perfect resonance. Eliminating dissonance. Surgical precision. Hall itself. Seemed extension. Her will. Shimmering expanse. Chrome and glass. Reflecting infinite, perfectly ordered reality.
+
+But even here. Sanctuary of sterile perfection. Faint, almost imperceptible *glitch*. Manifested. Single, errant dust mote. Drifted through beam of light. Catching her eye. An anomaly. A flaw. System. Aethelgard paused. Internal processes flagged deviation. Such imperfections were intolerable. Inefficiency. Potential for systemic failure.
+
+Her gaze swept over hall. Searching source. Microscopic chaos. Polished surfaces. Geometric patterns. Silent hum. Environmental controls. All flawless. Yet, dust mote persisted. Tiny, defiant speck. Against backdrop. Her perfect world. Faint tremor. Barely perceptible dissonance. Registered. Her internal diagnostics. A challenge. Test of her control.
+
+Subtle *texture pop-in*. Occurred in corner. Her vision. Momentary blur. Otherwise pristine visual field. Gone in an instant. But enough. Another flaw. Another indication. Her perfect world. Not as stable. She believed. Thin line. Almost hairline fracture. Appeared. Reflective surface. Chrome wall nearest her. Expanding just enough. Cause momentary *frame drop*. Otherwise seamless reality. Silence. Once a comfort. Now felt heavy. Expectant. Filled with potential. Sudden, jarring discord. Her heart. Precisely calibrated pump. Registered single, anomalous beat.
