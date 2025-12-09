@@ -14,6 +14,7 @@ These documents provide the detailed micro-arcs, character beats, MaidKnight int
 
 Essential guides for maintaining narrative consistency, character voice, and world-building.
 
+*   [**Chapter Generation Plan**](chapter_generation_plan.md): Comprehensive plan for automated chapter writing and editing, including strategies for quality, rate limits, and human oversight.
 *   [**Character Evolution Tracker**](character_evolution_tracker.md): Detailed voice profiles, Enneagram integrations, and character arcs for all 9 Princesses and MaidKnights.
 *   [**World Codex**](world-codex.md): Lore, locations, System mechanics, and key terms.
 *   [**Genre Wisdom**](genre-wisdom.md): Guiding principles for the "Gilded Entropy" aesthetic, "Clinical Nightmare Rhythm," and overall tone.
