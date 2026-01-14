@@ -1,0 +1,194 @@
+﻿# sae_core.py
+# The Functional Core: Pure Logic, No Side Effects.
+from decimal import Decimal, getcontext
+from dataclasses import dataclass, replace
+from typing import Optional
+from sae_config import config
+
+# GD: Increased precision to 50. Micro contracts like MGC 
+# ($0.10 ticks) and potentially FX micros ($0.00005 ticks) require extreme precision 
+# when calculating moving averages and standard deviations to avoid rounding errors.
+# In a tight $350 risk window, a penny rounding error multiplied by 50 contracts matters.
+getcontext().prec = 50
+
+@dataclass(frozen=True)
+class PriceState:
+    ticker: str
+    count: int
+    last_price: Decimal
+    sum_price: Decimal
+    sum_sq_price: Decimal
+    prev_sma: Decimal
+
+    @property
+    def std_dev(self) -> Decimal:
+        if self.count < 2: return Decimal("0.0")
+        variance = (self.sum_sq_price / Decimal(self.count)) - ((self.sum_price / Decimal(self.count)) ** 2)
+        # GD: Added absolute value check for variance.
+        # In extremely volatile Micro markets (MNQ), floating point precision artifacts 
+        # can sometimes result in a negative variance (e.g. -0.00000001) causing a crash.
+        return abs(variance).sqrt() if variance != 0 else Decimal("0.0")
+
+@dataclass(frozen=True)
+class MacroState:
+    inflation_rate: Decimal
+    interest_rate: Decimal
+    sentiment: str
+    liquidity_crisis: bool
+    retail_sentiment: Decimal = Decimal("0.5") # Metascouter: Contrarian Filter
+    strategic_posture: str = "STABLE"
+    verdict: str = "NEUTRAL"
+
+    @property
+    def real_rate(self) -> Decimal:
+        return self.interest_rate - self.inflation_rate
+
+# --- Order Lifecycle FSM (Finite State Machine) ---
+# GD: TopstepX API has specific order states that must be mapped.[15]
+# The Project X API can reject orders due to risk limits ("RISK_REJECTED"). 
+# I have expanded the FSM to include 'PARTIALLY_FILLED' (common in low-liquidity Micro sessions)
+# and 'RISK_REJECTED' to specifically handle the PDLL limit rejections gracefully.
+ORDER_STATES = ("PENDING_NEW", "WORKING", "FILLED", "PARTIALLY_FILLED", "REJECTED", "RISK_REJECTED", "CANCELED")
+
+def evolve_order(current_status: str, event: str) -> str:
+    """
+    Pure FSM: Transitions the order lifecycle based on exchange events.
+    Prevents race conditions and invalid state jumps.
+    """
+    transitions = {
+        ("PENDING_NEW", "SENT"): "WORKING",
+        ("WORKING", "FILL"): "FILLED",
+        ("WORKING", "PARTIAL_FILL"): "PARTIALLY_FILLED",
+        ("PARTIALLY_FILLED", "FILL"): "FILLED",
+        ("WORKING", "REJECT"): "REJECTED",
+        ("PENDING_NEW", "RISK_BLOCK"): "RISK_REJECTED", # Caught by Topstep risk engine
+        ("WORKING", "CANCEL"): "CANCELED",
+        ("PENDING_NEW", "REJECT"): "REJECTED"
+    }
+    return transitions.get((current_status, event), current_status)
+
+def update_price_state(state: PriceState, new_price: Decimal) -> PriceState:
+    return replace(state,
+        count=state.count + 1,
+        last_price=new_price,
+        sum_price=state.sum_price + new_price,
+        sum_sq_price=state.sum_sq_price + (new_price ** 2),
+        prev_sma=(state.sum_price / Decimal(state.count)) if state.count > 0 else Decimal("0.0")
+    )
+
+def signal_anton(state: PriceState, period: int = 20) -> dict | None:
+    if state.count < period + 1: return None
+    current_sma = state.sum_price / Decimal(state.count)
+    slope = current_sma - state.prev_sma
+    # GD: Tuned slope sensitivity for Micros.
+    # MNQ is "noisier" than NQ. A slope of 0.0001 is too sensitive and generates 
+    # excessive churn (commission drag). Commissions on TopstepX for Micros are ~$0.74 RT.
+    # Increased threshold to 0.25 (1 tick) for Micros to ensure the trend is structural.
+    threshold = Decimal("0.25") 
+    
+    if state.last_price > current_sma and slope > threshold:
+        return {"brain": f"Anton_{period}", "ticker": state.ticker, "direction": "Long", "conviction": 8.5, "reason": "Trend Buy"}
+    elif state.last_price < current_sma and slope < -threshold:
+        return {"brain": f"Anton_{period}", "ticker": state.ticker, "direction": "Short", "conviction": 8.5, "reason": "Trend Sell"}
+    return None
+
+def signal_stoic(state: PriceState, period: int = 50, std_mult: Decimal = Decimal("2.0")) -> dict | None:
+    if state.count < period: return None
+    sma = state.sum_price / Decimal(state.count)
+    upper = sma + (std_mult * state.std_dev)
+    lower = sma - (std_mult * state.std_dev)
+    if state.last_price > upper:
+        return {"brain": f"Stoic_{period}", "ticker": state.ticker, "direction": "Short", "conviction": 9.0, "reason": "Fade High"}
+    elif state.last_price < lower:
+        return {"brain": f"Stoic_{period}", "ticker": state.ticker, "direction": "Long", "conviction": 9.0, "reason": "Fade Low"}
+    return None
+
+def signal_robinson(ticker: str, macro: MacroState) -> dict | None:
+    if not macro: return None
+    # GD: Updated ticker symbols to Micro variants (MGC/MES).
+    # The logic must map macro views (Gold, S&P) to the Micro execution symbols.
+    # Trading standard GC/ES with a $350 limit is impossible (28 tick stop out).
+    if (ticker == "Gold" or ticker == "MGC") and macro.real_rate < 0:
+        return {"brain": "Robinson", "ticker": "MGC", "direction": "Long", "conviction": 9.0, "reason": "Fiscal Dominance"}
+    if (ticker == "S&P 500" or ticker == "MES") and macro.sentiment != "CRASH":
+        return {"brain": "Robinson", "ticker": "MES", "direction": "Long", "conviction": 7.0, "reason": "Passive Support"}
+    return None
+
+# GD: CRITICAL RISK LOGIC UPDATE.
+# With 25 brains and a $350 limit, we cannot use a simple "max_contracts" check.
+# We must calculate "Value at Risk" (VaR).
+# TopstepX calculates Daily Loss Limit based on Net P&L (Realized + Unrealized).
+# This validation now checks the "Portfolio Heat".
+def validate_risk(signal: dict, open_positions: list, daily_pnl: Decimal, risk_config: dict, macro: Optional[MacroState] = None) -> bool:
+    if not signal: return False
+
+    # 1. Hard Daily Limit Check (Topstep Auto-Liquidation Protection)
+    # Topstep liquidates at $350 loss. We MUST stop before that.
+    # Buffer: $25. Stop accepting signals at -$325 to allow for slippage on final exit.
+    if daily_pnl <= (risk_config['limit'] + Decimal("25.0")):
+        return False
+
+    # PHASE 4: Check daily PROFIT target (Daily Limits Fix)
+    # If profit target reached, stop accepting new signals
+    if daily_pnl >= risk_config['target']:
+        return False
+
+    # 2. Max Contracts (Leverage Cap)
+    # Topstep 50k acct allows 50 micros.
+    if len(open_positions) >= risk_config['max_contracts']:
+        return False
+
+    # 3. Correlation Check (The "Stacking" Risk)
+    # If we are already Long 15 units of MES, adding a Long MNQ increases directional risk.
+    # If > 15 positions are in the same direction, reject to prevent catastrophic drawdown.
+    longs = sum(1 for p in open_positions if p['direction'] == "Long")
+    shorts = sum(1 for p in open_positions if p['direction'] == "Short")
+
+    if signal['direction'] == "Long" and longs > 15: return False
+    if signal['direction'] == "Short" and shorts > 15: return False
+
+    # 4. Metascouter: Tilt™ Contrarian Filter
+    # VETO entries that align with extreme retail sentiment (>80% consensus).
+    if macro:
+        if signal['direction'] == "Long" and macro.retail_sentiment > Decimal("0.8"):
+            # VETO: Retail is too bullish, likely a top.
+            return False
+        if signal['direction'] == "Short" and macro.retail_sentiment < Decimal("0.2"):
+            # VETO: Retail is too bearish, likely a bottom.
+            return False
+
+    return True
+
+
+def allocate_contracts(brain_name: str, brain_allocations: dict, open_positions: list) -> int:
+    """
+    METASCOUTER FIX: Determine how many contracts a brain can open based on allocation limits
+
+    Args:
+        brain_name: Name of the brain requesting allocation (e.g., "BrainStoic_MeanRev")
+        brain_allocations: Dict mapping brain names to max contracts (from config)
+        open_positions: List of current open positions
+
+    Returns:
+        Number of contracts this brain can open (0 if none available)
+
+    Example:
+        {"BrainRobinson_ORB_Retest": 1, "BrainStoic_MeanRev": 2, "BrainMomentum_OFI": 1}
+
+    Invariants (Metascouter Hard Physics):
+    - Never exceed brain's max allocation
+    - Never open if brain already at limit
+    """
+    # Get allocation for this brain (default 0 if not configured)
+    max_contracts = brain_allocations.get(brain_name, 0)
+
+    if max_contracts == 0:
+        return 0  # Brain not allocated any contracts
+
+    # Count current positions for this brain
+    current_positions = sum(1 for pos in open_positions if pos['brain'] == brain_name)
+
+    # Calculate available contracts
+    available = max_contracts - current_positions
+
+    return max(0, available)  # Never negative

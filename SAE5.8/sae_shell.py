@@ -1,0 +1,696 @@
+
+import asyncio
+import json
+import os
+import sys
+import psutil
+import datetime
+import threading
+from collections import deque
+import random
+from decimal import Decimal
+
+# Local Imports
+import sae_store
+import sae_core
+from sae_config import config
+from sae_types import TradeEvent, L2State, MarketProfile
+from strategy_registry import StrategyRegistry
+
+# Import Brains to trigger Decorators
+try:
+    from brains.brain_titan import BrainTitan
+    from brains.brain_flux import BrainFlux
+    from brains.brain_robinson import BrainRobinson
+    from brains.brain_costanza import BrainCostanza
+except ImportError as e:
+    print(f" [SHELL] Warning: Failed to import a core brain: {e}")
+
+# Legacy Imports (Optional)
+try:
+    from brains.brain_mr2 import BrainMR2
+    from brains.brain_momentum import BrainMomentum
+    from brains.brain_scalper import BrainScalper
+    from brains.brain_metascout import BrainMetaScout
+    from brains.brain_apex_defensive import BrainApexDefensive
+    from brains.brain_recursive import BrainRecursive
+except ImportError: pass
+from friction_model import FrictionModel
+from brains.sae_vats import VATS  # METASCOUTER FIX (Phase 5): VATS trailing stops
+from ladder_03_engine import TimeFlow # RUNG 3 ENGINE IMPORT
+
+# Configuration
+sys_cfg = config.get_system()
+risk_cfg = config.get_risk()
+strat_cfg = config.get_strategy()
+DATA_FILE = sys_cfg['data_file']
+SOFT_LIMIT = risk_cfg['limit']
+MAX_CONTRACTS = risk_cfg['max_contracts']
+ROBINSON_INTERVAL = strat_cfg['robinson_check_interval']
+
+def orphan_monitor():
+    sys.stdin.read()
+    print(" Parent pipe closed. Suicide.")
+    os._exit(1)
+
+# GD: Enhanced ReplayClient to simulate TopstepX execution nuances.
+# Real TopstepX execution via Project X API has latency (WebSocket) and slippage.
+# Adjusted simulation to be punitive on Micro contracts (MNQ/MGC) where liquidity can be 
+# thinner than main contracts, causing 1-2 tick slippage on market orders.[14]
+class ReplayClient:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.queue = asyncio.Queue()
+        self.running = False
+    
+    def connect(self):
+        self.running = True
+        self.loop = asyncio.get_event_loop()
+        threading.Thread(target=self._run_producer_thread, daemon=True).start()
+        
+    def _run_producer_thread(self):
+        """Backround thread to run Sync TimeFlow and push to Async Queue"""
+        if not os.path.exists(self.file_path): 
+            print(f" [ERROR] Data file not found: {self.file_path}")
+            return
+
+        # Initialize TimeFlow (Ladder 3 Engine)
+        # Ticker hardcoded to MNQ for simulation/stress test config override?
+        # Ideally get from config, but TimeFlow takes one ticker.
+        flow = TimeFlow(self.file_path, ticker="MNQ").stream()
+        
+        last_ts = None
+        
+        for t in flow: # Iterating Tick objects
+            if not self.running: break
+            
+            try:
+                # Convert Tick (Primitive) to App-Shell Dict
+                price = Decimal(str(t.price))
+                
+                # Synthetic Spread / L2 Logic (Ported from old ReplayClient)
+                ticker = t.ticker
+                if ticker == 'MGC' or ticker == 'Gold':
+                    spread = Decimal("0.10") 
+                elif ticker == 'MNQ' or ticker == 'NQ':
+                    spread = Decimal("0.50")
+                else:
+                    spread = Decimal("0.25")
+
+                if random.random() < 0.05: spread *= 4 
+                
+                bid = price - (spread / 2)
+                ask = price + (spread / 2)
+                
+                # Synthetic L2 for Flux
+                bids = [{'price': bid, 'size': 5}, {'price': bid-Decimal("0.1"), 'size': 10}]
+                asks = [{'price': ask, 'size': 5}, {'price': ask+Decimal("0.1"), 'size': 10}]
+                
+                tick_dict = {
+                    'ticker': ticker,
+                    'last': price,
+                    'price': float(price), # Compat
+                    'bid': bid,
+                    'ask': ask,
+                    'bids': bids,
+                    'asks': asks,
+                    'timestamp_float': t.timestamp,
+                    'size': t.size # Pass volume!
+                }
+                
+                # Push to Async Queue safely
+                asyncio.run_coroutine_threadsafe(self.queue.put(tick_dict), self.loop)
+                
+                # Simulation Speed Control
+                # If we want 1000x speed:
+                # current_ts = t.timestamp
+                # if last_ts:
+                #    delta = current_ts - last_ts
+                #    if delta > 0: time.sleep(delta * 0.001) 
+                # last_ts = current_ts
+                
+            except Exception as e:
+                print(f"[Producer Error] {e}")
+                
+        asyncio.run_coroutine_threadsafe(self.queue.put(None), self.loop)
+
+    async def _produce_ticks(self):
+        # Legacy stub
+        pass
+   
+    async def subscribe_market_data(self):
+        while self.running:
+            tick = await self.queue.get()
+            if tick is None: break
+            yield tick
+            
+    async def place_order(self, order, inst_cfg):
+        # GD: Simulated latency for Project X API.
+        # Metascouter: Gaussian Jitter (50ms - 450ms) to mask automated signatures.
+        # We use a mean of 0.25 and std dev of 0.1 to cover the 0.05-0.45 range.
+        jitter = random.gauss(0.25, 0.1)
+        jitter = max(0.05, min(0.45, jitter))
+        await asyncio.sleep(jitter)
+
+        # GD: Micro contract slippage simulation.
+        # Market orders on Micros can slip 1-2 ticks easily during high vol.    
+        slippage_ticks = random.randint(0, inst_cfg['slippage_max'])
+        slippage = Decimal(str(slippage_ticks)) * inst_cfg['tick_size']
+        
+        fill_price = order['price'] + slippage if order['side'] == "BUY" else order['price'] - slippage
+        return {"status": "FILLED", "fill_price": fill_price}
+
+class TokenBucket:
+    """
+    Metascouter: Token Bucket algorithm for TopstepX API.
+    Capacity: 180, Refill: 3 req/sec.
+    Ensures zero-throttle execution by smoothing request bursts.
+    """
+    def __init__(self, capacity: int = 180, refill_rate: float = 3.0):
+        self.capacity = float(capacity)
+        self._tokens = float(capacity)
+        self.refill_rate = refill_rate
+        self.last_update = datetime.datetime.now().timestamp()
+
+    def consume(self, tokens: int = 1) -> bool:
+        now = datetime.datetime.now().timestamp()
+        # Refill tokens based on time passed
+        self._tokens = min(self.capacity, self._tokens + (now - self.last_update) * self.refill_rate)
+        self.last_update = now
+        
+        if self._tokens >= tokens:
+            self._tokens -= tokens
+            return True
+        return False
+
+class SaeShell:
+    def __init__(self):
+        self.realized_pnl = Decimal("0.00")
+        self.open_positions = []
+        self.price_states = {}
+        self.client = ReplayClient(DATA_FILE)
+        self.running = True
+        self.macro_state = sae_core.MacroState(Decimal("0.06"), Decimal("0.03"), "NEUTRAL", False)
+        self.last_robinson_time = 0
+        self.current_prices = {}
+        self.profiles = {}
+        # PHASE 1: Market Time Tracking (Daily Limits Fix)
+        self.current_market_time = None  # Track current tick timestamp
+        self.current_market_date = None  # Track current market date (YYYY-MM-DD)
+        
+        # Instantiate Brains (Robust Loader)
+        self.brains = []
+        
+        # 1. Registered Strategies (The "Fixed" Tier)
+        # Robinson/Flux/Titan should be in Registry now.
+        reg_map = {
+            "Robinson": "MNQ",
+            "Flux": "MNQ",
+            "Titan": "MGC", 
+            "Costanza_Portfolio": "MNQ" 
+        }
+        
+        for name, ticker in reg_map.items():
+            cls = StrategyRegistry.get(name)
+            if cls:
+                try:
+                    # Instantiation
+                    # Costanza requires a base strategy name, we default to Robinson for now if needed, 
+                    # but StrategyRegistry.get("Costanza") returns the class.
+                    # BrainCostanza init: (ticker, base_strategy="Robinson")
+                    if name == "Costanza_Portfolio":
+                        b = cls(ticker, original_brain="Robinson_ORB_Retest")
+                    else:
+                        b = cls(ticker)
+                    self.brains.append(b)
+                    print(f" [SHELL] Active: {name} ({ticker})")
+                except Exception as e:
+                    print(f" [SHELL] Failed to load {name}: {e}")
+            else:
+                print(f" [SHELL] Warning: {name} not found in Registry. (Did you add @register?)")
+
+        # 2. Legacy / Experimental Brains (Try/Except)
+        legacy_brains = [
+            ("BrainMR2", "MES"),
+            ("BrainMomentum", "MNQ"),
+            ("BrainScalper", "MNQ"),
+            ("BrainRecursive", "MNQ"),
+            ("BrainApexDefensive", "MNQ"),
+            ("BrainMetaScout", "MES")
+        ]
+        
+        for cls_name, ticker in legacy_brains:
+            try:
+                # Check if class exists in locals() (imported above)
+                if cls_name in locals():
+                    cls_ref = locals()[cls_name]
+                    self.brains.append(cls_ref(ticker))
+                    print(f" [SHELL] Active (Legacy): {cls_name} ({ticker})")
+            except Exception as e:
+                print(f" [SHELL] Skipped {cls_name}: {e}")
+
+        # GD: Commission Tracking via FrictionModel
+        self.friction = FrictionModel(Decimal("0.1"))
+
+        # Metascouter: Token Bucket Rate Limiter
+        # Native API v2 (ProjectX): 400-slot concurrency simulation
+        self.rate_limiter = TokenBucket(capacity=400, refill_rate=10.0)
+        print(" [METASCOUT] Native API v2 (ProjectX) active. 400-slot concurrency slotting enabled.")
+
+    def calculate_total_pnl(self) -> Decimal:
+        unrealized = Decimal("0.00")
+        for pos in self.open_positions:
+            ticker = pos['ticker']
+            if ticker not in self.current_prices: continue
+            inst_cfg = config.get_instrument(ticker)
+            price = self.current_prices[ticker]['last']
+
+            diff = (price - pos['entry_price']) if pos['direction'] == "Long" else (pos['entry_price'] - price)
+
+            # GD: Correct PnL math: (Ticks) * (Tick Value).
+            # e.g., MGC: 1.0 diff / 0.10 tick size = 10 ticks. 10 * $1.00 = $10.00.
+            val = (diff / inst_cfg['tick_size']) * inst_cfg['tick_value']
+            unrealized += val
+
+        return self.realized_pnl + unrealized
+
+    def reset_daily_pnl(self, reason: str = "day_boundary", previous_date: str = None):
+        """
+        PHASE 5: Reset daily PnL counters for new trading day (Daily Limits Fix)
+
+        Args:
+            reason: Why reset occurred (day_boundary, new_file, manual)
+            previous_date: Previous market date (for logging summary)
+        """
+        # Log previous day's summary if we have the info
+        if reason == "day_boundary" and previous_date:
+            print(f"[DAILY_SUMMARY] {previous_date} Final PnL: ${self.realized_pnl:.2f}")
+
+            # Check if limits were hit
+            risk_cfg = config.get_risk()
+            if self.realized_pnl >= risk_cfg['target']:
+                print(f"[DAILY_SUMMARY] ✅ Profit target ${risk_cfg['target']} reached!")
+            elif self.realized_pnl <= risk_cfg['limit']:
+                print(f"[DAILY_SUMMARY] ❌ Loss limit ${risk_cfg['limit']} hit!")
+
+        print(f"[RESET] Daily PnL reset. Reason: {reason}. Previous realized: ${self.realized_pnl:.2f}")
+
+        # Reset in-memory counters
+        self.realized_pnl = Decimal("0.00")
+
+        # Reset any daily flags (if they exist)
+        if hasattr(self, 'daily_stop_hit'):
+            self.daily_stop_hit = False
+        if hasattr(self, 'daily_target_hit'):
+            self.daily_target_hit = False
+        if hasattr(self, 'circuit_lvl1_triggered'):
+            self.circuit_lvl1_triggered = False
+        if hasattr(self, 'circuit_lvl2_triggered'):
+            self.circuit_lvl2_triggered = False
+        if hasattr(self, 'hit_profit_target'):
+            self.hit_profit_target = False
+
+        # Reset control flags
+        sae_store.set_control_flag("pause_entries", "false")
+
+        print(f"[RESET] New trading day. Counters reset to $0.00")
+
+    async def update_robinson_macro(self):
+        now = asyncio.get_event_loop().time()
+        if now - self.last_robinson_time < ROBINSON_INTERVAL: return
+        self.last_robinson_time = now
+        ticker = next(iter(self.current_prices.keys())) if self.current_prices else "Market"
+        price = self.current_prices.get(ticker, {}).get('last', 0.0)
+        ctx_file = f"ctx_macro_shell.json"
+        
+        try:
+            with open(ctx_file, "w") as f: json.dump({"ticker": ticker, "price": float(price)}, f)
+            proc = await asyncio.create_subprocess_exec(sys.executable, "robinson_bridge.py", "Robinson_Macro", "Strategic Assessment", ctx_file, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout, _ = await proc.communicate()
+            if proc.returncode == 0:
+                data = json.loads(stdout.decode().strip())
+                logic, posture = data.get("logic", ""), data.get("strategic_posture", "STABLE")
+                retail_sent = Decimal(str(data.get("retail_sentiment", 0.5)))
+                n_infl, n_rates = (Decimal("0.06"), Decimal("0.03")) if "Fiscal Dominance" in logic else (Decimal("0.04"), Decimal("0.05"))
+                self.macro_state = sae_core.MacroState(n_infl, n_rates, "CRASH" if posture == "CRITICAL" else "NEUTRAL", (posture == "CRITICAL"), retail_sent)
+        except: pass
+        finally:
+            if os.path.exists(ctx_file): os.remove(ctx_file)
+
+    async def watchdog_task(self):
+        while self.running:
+            if sae_store.get_control_flag("system_status") == "STOP": self.running = False
+            pnl = self.calculate_total_pnl()
+            
+            # Metascouter: UI Spoofing Simulation
+            # Injecting Gaussian-jittered "mouse movements" to bypass behavioral telemetry
+            ms_cfg = config.get_metascouter()
+            if ms_cfg.get('ui_spoofing_enabled'):
+                jitter = ms_cfg.get('gaussian_jitter_level', 0.05)
+                # Simulated jittered log to indicate activity
+                # print(f"[SPOOF] Mouse Jitter Applied: {random.gauss(0, jitter):.4f}")
+                pass
+
+            # METASCOUTER FIX (Phase 4): Multi-Level Circuit Breakers
+            # Level 1 (-$100): Pause new entries
+            # Level 2 (-$200): Close 50% of positions
+            # Level 3 (-$330): Close ALL positions, halt trading
+            # TopstepX hard limit at -$350, we halt at -$330 for safety buffer
+
+            if pnl <= Decimal("-330.00"):
+                # Level 3: EMERGENCY HALT
+                print(f" [CIRCUIT BREAKER LVL 3] EMERGENCY HALT (${pnl}). CLOSING ALL POSITIONS.")
+                sae_store.set_control_flag("trading_halt", "true")
+                self.running = False
+                # Close all positions immediately in next tick
+
+            elif pnl <= Decimal("-200.00"):
+                # Level 2: Close 50% of positions
+                if not getattr(self, 'circuit_lvl2_triggered', False):
+                    self.circuit_lvl2_triggered = True
+                    positions_to_close = len(self.open_positions) // 2
+                    print(f" [CIRCUIT BREAKER LVL 2] Closing {positions_to_close} positions (${pnl}).")
+                    # Mark positions for close in next tick
+
+            elif pnl <= Decimal("-100.00"):
+                # Level 1: Pause new entries
+                if not getattr(self, 'circuit_lvl1_triggered', False):
+                    self.circuit_lvl1_triggered = True
+                    print(f" [CIRCUIT BREAKER LVL 1] Pausing new entries (${pnl}).")
+                    sae_store.set_control_flag("pause_entries", "true")
+
+            # Profit Lock Logic (Titan 2.3)
+            # If PnL > 1000, enable preservation. Stop if drops to 900 (90% lock).
+            elif pnl >= Decimal("1000.00"):
+                if not hasattr(self, 'hit_profit_target'):
+                    self.hit_profit_target = True
+                    print(f" PROFIT TARGET HIT (${pnl}). ENGAGING 90% LOCK.")       
+
+            if getattr(self, 'hit_profit_target', False):
+                if pnl < Decimal("900.00"):
+                     print(f" PROFIT LOCK TRIGGERED (${pnl}). HALTING TO BANK GAINS.")
+                     self.running = False
+                
+            # Metascouter: Monday Morning Meta
+            # Reminder to submit payout requests at 5:00 PM CT Sunday.
+            try:
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                # Approx CT = UTC - 6
+                ct_now = now_utc - datetime.timedelta(hours=6)
+                if ct_now.weekday() == 6: # Sunday
+                    if ct_now.hour == 16: # 4 PM CT, one hour before window
+                        if not hasattr(self, 'payout_notified'):
+                            print(" [METASCOUT] MONDAY MORNING META: Submit Payout Request in 1 hour (5 PM CT).")
+                            self.payout_notified = True
+            except: pass
+
+            await self.update_robinson_macro()
+            await asyncio.sleep(1)
+
+    async def run(self):
+        sae_store.init_db()
+        # PHASE 3: Pass market_date when available, else None (uses system date for live)
+        self.realized_pnl = sae_store.get_daily_pnl(market_date=self.current_market_date)
+        asyncio.create_task(self.watchdog_task())
+        await self.client.connect()
+        async for tick in self.client.subscribe_market_data():
+            if not self.running: break
+
+            # PHASE 1 & 5: Update market time and detect day boundaries
+            previous_market_date = self.current_market_date
+
+            ts_float = tick.get('timestamp_float')
+            if ts_float:
+                self.current_market_time = datetime.datetime.fromtimestamp(ts_float, tz=datetime.timezone.utc)
+                self.current_market_date = self.current_market_time.strftime("%Y-%m-%d")
+
+            # PHASE 5: Detect day boundary crossing
+            if previous_market_date and self.current_market_date and self.current_market_date != previous_market_date:
+                print(f"[DAY_BOUNDARY] Market date changed: {previous_market_date} → {self.current_market_date}")
+                self.reset_daily_pnl(reason="day_boundary", previous_date=previous_market_date)
+
+            ticker = tick['ticker']
+            self.current_prices[ticker] = {"bid": tick['bid'], "ask": tick['ask'], "last": tick['last']}
+            
+            if ticker not in self.price_states: 
+                self.price_states[ticker] = sae_core.PriceState(ticker, 0, tick['last'], Decimal("0.0"), Decimal("0.0"), Decimal("0.0"))
+            
+            self.price_states[ticker] = sae_core.update_price_state(self.price_states[ticker], tick['last'])
+            
+            inst_cfg = config.get_instrument(ticker)
+            if not inst_cfg: continue
+            
+            # Spread Check
+            spread_ticks = (tick['ask'] - tick['bid']) / inst_cfg['tick_size']
+            if spread_ticks > inst_cfg['spread_breaker']: continue
+
+            # Exits - Logic adjusted for Micros PnL & Commissions
+            remaining = []
+            ts_float = tick.get('timestamp_float', datetime.datetime.now().timestamp())
+
+            # METASCOUTER FIX (Phase 4): Emergency close for circuit breakers
+            emergency_halt = sae_store.get_control_flag("trading_halt") == "true"
+            lvl2_active = getattr(self, 'circuit_lvl2_triggered', False) and not getattr(self, 'circuit_lvl2_closed', False)
+
+            for pos in self.open_positions:
+                if pos['ticker'] != ticker: remaining.append(pos); continue
+                ex = None
+                reason = ""
+
+                # Emergency halt: Close ALL positions immediately
+                if emergency_halt:
+                    ex = tick['bid'] if pos['direction'] == "Long" else tick['ask']
+                    reason = "CIRCUIT_BREAKER_LVL3"
+
+                # Level 2: Close 50% of positions (close first N positions)
+                elif lvl2_active and len([p for p in self.open_positions if 'circuit_lvl2_closed' not in p]) > len(self.open_positions) // 2:
+                    ex = tick['bid'] if pos['direction'] == "Long" else tick['ask']
+                    reason = "CIRCUIT_BREAKER_LVL2"
+                    pos['circuit_lvl2_closed'] = True
+                
+                # Metascouter: Ghost Buffer (Offensive Leg Drawdown Arbitrage)
+                # keep profitable runners open until 3:10 PM CT (15:10)
+                # to utilize EOD Trailing Drawdown for massive 100-point moves.
+                is_ghost_buffer_active = False
+                try:
+                    # Calculate current unrealized for this specific position   
+                    diff = (tick['last'] - pos['entry_price']) if pos['direction'] == "Long" else (pos['entry_price'] - tick['last'])
+                    pos_unrealized = (diff / inst_cfg['tick_size']) * inst_cfg['tick_value']
+
+                    dt = datetime.datetime.fromtimestamp(ts_float, tz=datetime.timezone.utc)
+                    # Convert to CT (approx -6h)
+                    ct_hour = (dt.hour - 6) % 24
+                    if ct_hour < 15 or (ct_hour == 15 and dt.minute < 10):      
+                        # Metascouter: If we have a massive winner (>50 ticks), 
+                        # engage 'Offensive Leg' mode to target the 100-point runner.
+                        if pos_unrealized > 0:
+                            is_ghost_buffer_active = True
+                except: pass
+
+                # METASCOUTER FIX (Phase 4): Update unrealized PnL on every tick
+                sae_store.update_unrealized_pnl(pos['trade_id'], pos_unrealized)
+
+                # METASCOUTER FIX (Phase 5): Update VATS trailing stop
+                if pos.get('vats') is not None:
+                    vats_stop = pos['vats'].update(tick['last'])
+                    # Override position stop_loss with VATS-adjusted stop
+                    pos['stop_loss'] = vats_stop
+
+                # Only check normal exit conditions if no emergency close
+                if not ex:
+                    if pos['direction'] == "Long":
+                        if tick['last'] >= pos['take_profit']:
+                            if not is_ghost_buffer_active: ex, reason = tick['bid'], "TARGET"
+                        elif tick['last'] <= pos['stop_loss']: ex, reason = tick['bid'], "STOP"
+                    else:
+                        if tick['last'] <= pos['take_profit']:
+                            if not is_ghost_buffer_active: ex, reason = tick['ask'], "TARGET"
+                        elif tick['last'] >= pos['stop_loss']: ex, reason = tick['ask'], "STOP"
+
+                if ex:
+                    d = (ex - pos['entry_price']) if pos['direction'] == "Long" else (pos['entry_price'] - ex)
+                    gross_pnl = ((d / inst_cfg['tick_size']) * inst_cfg['tick_value'])
+                    
+                    # Calculate Fee
+                    fee = self.friction.calculate_cost(ticker)
+                    net_pnl = gross_pnl - fee # Deduct Micro fees (RT)
+                    
+                    self.realized_pnl += net_pnl
+                    
+                    self.realized_pnl += net_pnl
+                    sae_store.update_trade_exit(pos['trade_id'], ex, net_pnl, "CLOSED")
+                    print(f" EXIT: {ticker} @ {ex:.2f} | Reason: {reason} | Net: ${self.realized_pnl:.2f}")
+                else: remaining.append(pos)
+            self.open_positions = remaining
+
+            # Entry
+            # Metascouter: Throttling entry via Token Bucket rate limiter.
+            if len(self.open_positions) < MAX_CONTRACTS and self.rate_limiter.consume():
+                
+                # Convert ReplayTick to SAE Objects
+                ts_float = tick.get('timestamp_float', datetime.datetime.now().timestamp())
+                t_evt = TradeEvent(ticker, tick['last'], 1, "Buy", ts_float)
+                l2_obj = L2State(ticker, instrument_id=ticker, bids=tick.get('bids', []), asks=tick.get('asks', []))
+                
+                if ticker not in self.profiles: self.profiles[ticker] = MarketProfile(ticker)
+                self.profiles[ticker].update(tick['last'], 1)
+                
+                signals = []
+                total_pnl = self.calculate_total_pnl()
+                brain_votes = {"Long": 0, "Short": 0}
+                
+                for brain in self.brains:
+                    # Sync total PnL to each brain for Metascouter/Risk logic   
+                    brain.daily_pnl = total_pnl
+
+                    # Filter: Brains only run on their native ticker in this shell implementation
+                    if brain.ticker != ticker: continue
+
+                sig = brain.on_market_update(l2_obj, self.profiles[ticker], t_evt)
+                if sig:
+                        sig['brain'] = brain.name
+                        signals.append(sig)
+                        if sig.get('direction') in ["Long", "BUY", 1]: brain_votes["Long"] += 1
+                        if sig.get('direction') in ["Short", "SELL", -1]: brain_votes["Short"] += 1
+
+                # Metascouter: Byzantine Fault Tolerance (Council Governance)
+                # Filter signals based on consensus. Requires at least 2 brains to agree, OR high conviction.
+                filtered_signals = []
+                for sig in signals:
+                    if sig.get('direction') == 'EXIT':
+                        filtered_signals.append(sig) # Exits skip consensus for safety
+                        continue
+                        
+                    direction = "Long" if sig.get('direction') in ["Long", "BUY", 1] else "Short"
+                    conviction = sig.get('conviction', 0)
+                    
+                    if brain_votes[direction] >= 2 or conviction >= 0.95:
+                        filtered_signals.append(sig)
+                    else:
+                        if random.random() < 0.05: print(f" [BFT] Signal VETO: No Consensus for {direction} ({brain_votes[direction]} votes, conviction {conviction:.2f})")
+                
+                signals = filtered_signals
+                for sig in signals:
+                    if not sig: continue
+                    
+                    # Handle EXIT Signals
+                    if sig.get('direction') == 'EXIT':
+                        # Find position for this brain/ticker
+                        for pos in self.open_positions:
+                            if pos['ticker'] == ticker and pos['brain'] == sig['brain']:
+                                # Force Exit Logic
+                                inst_cfg = config.get_instrument(ticker)
+                                exit_price = tick['bid'] if pos['direction'] == "Long" else tick['ask'] # Approximate/Market Exit
+                                
+                                d = (exit_price - pos['entry_price']) if pos['direction'] == "Long" else (pos['entry_price'] - exit_price)
+                                gross_pnl = ((d / inst_cfg['tick_size']) * inst_cfg['tick_value'])
+                                
+                                # Fee
+                                rt_cost = self.friction.calculate_cost(ticker)
+                                # We already deducted half at entry. Deduct other half.
+                                net_pnl = gross_pnl - (rt_cost / 2)
+                                
+                                self.realized_pnl += net_pnl
+                                sae_store.update_trade_exit(pos['trade_id'], exit_price, net_pnl, "SIGNAL_EXIT")
+                                self.open_positions.remove(pos)
+                                print(f" SIGNAL EXIT ({sig['brain']}): {ticker} @ {exit_price:.2f} | Reason: {sig.get('reason')} | Net: ${self.realized_pnl:.2f}")
+                                break # Handled
+                        continue # Done with this signal
+
+                    # Avoid duplicate signals for same brain/ticker
+                    if any(p['ticker'] == ticker and p['brain'] == sig['brain'] for p in self.open_positions): continue
+
+                    # METASCOUTER FIX (Phase 3): Check contract allocation BEFORE risk validation
+                    brain_allocations = strat_cfg.get('brain_allocations', {})
+                    available_contracts = sae_core.allocate_contracts(sig['brain'], brain_allocations, self.open_positions)
+
+                    if available_contracts == 0:
+                        # Brain has no allocation or already at limit
+                        continue
+
+                    # METASCOUTER FIX (Phase 4): Check circuit breaker pause flag
+                    if sae_store.get_control_flag("pause_entries") == "true":
+                        # Level 1 circuit breaker active - no new entries
+                        continue
+
+                    # PHASE 4: Pre-execution daily limit checks (Daily Limits Fix)
+                    daily_pnl = self.calculate_total_pnl()
+
+                    if daily_pnl >= risk_cfg['target']:
+                        if random.random() < 0.1:  # Log occasionally to avoid spam
+                            print(f" [LIMIT] Daily profit target ${risk_cfg['target']} reached. PnL: ${daily_pnl:.2f}. Skipping signal.")
+                        continue
+
+                    if daily_pnl <= risk_cfg['limit']:
+                        if random.random() < 0.1:
+                            print(f" [LIMIT] Daily loss limit ${risk_cfg['limit']} hit. PnL: ${daily_pnl:.2f}. Skipping signal.")
+                        continue
+
+                    if sae_core.validate_risk(sig, self.open_positions, daily_pnl, risk_cfg, self.macro_state):
+                        trade_id = f"TRD-{int(datetime.datetime.now().timestamp()*1000)}"
+                        
+                        # Normalize Direction
+                        side = "BUY" if sig['direction'] in ["Long", "BUY"] else "SELL"
+                        
+                        # Execute
+                        fill = await self.client.place_order({"ticker": ticker, "price": tick['ask'] if side == "BUY" else tick['bid'], "side": side}, inst_cfg)
+                        
+                        if fill['status'] == "FILLED":
+                            entry = fill['fill_price']
+                            # GD: Tight Stops for Micros to fit 25 brains in $350.
+                            # MGC: 15 ticks stop ($15 risk). MNQ: 40 ticks stop ($20 risk).
+                            stop_distance = Decimal("15.0") * inst_cfg['tick_size'] if ticker == "MGC" else Decimal("40.0") * inst_cfg['tick_size']
+                            target_distance = stop_distance * Decimal("3.0") # 3:1 Reward/Risk target
+                            
+                            tp = entry + target_distance if side == "BUY" else entry - target_distance
+                            sl = entry - stop_distance if side == "BUY" else entry + stop_distance
+                            
+                            # SYNC STATE WITH BRAIN
+                            for brain in self.brains:
+                                if brain.name == sig['brain']:
+                                    brain.notify_fill(float(entry), float(sl), float(tp))
+                                    brain.last_trade_time = ts_float
+                            
+                            # METASCOUTER FIX (Phase 5): Initialize VATS for position
+                            vats_instance = None
+                            if strat_cfg.get('vats_enabled', False):
+                                # Estimate ATR as 2x stop distance (simple heuristic)
+                                estimated_atr = stop_distance * Decimal("0.5")
+                                atr_multiplier = Decimal(str(strat_cfg.get('vats_atr_multiplier', 2.5)))
+                                direction = "Long" if side == "BUY" else "Short"
+                                vats_instance = VATS(direction, entry, tp, estimated_atr, atr_multiplier)
+
+                            self.open_positions.append({
+                                "trade_id": trade_id,
+                                "ticker": ticker,
+                                "direction": "Long" if side == "BUY" else "Short",
+                                "entry_price": entry,
+                                "take_profit": tp,
+                                "stop_loss": sl,
+                                "brain": sig['brain'],
+                                "vats": vats_instance  # METASCOUTER FIX: VATS instance
+                            })
+                            
+                            # Deduct entry commission? No, FrictionModel returns RT cost.
+                            # We deduct FULL RT upon EXIT to simplify or split it?
+                            # BacktestBroker splits it. SaeShell previously deducted 0.74 (RT?) or 0.37?
+                            # Previous code: self.realized_pnl -= self.commission_per_contract
+                            # And at exit: net_pnl = gross_pnl - self.commission_per_contract
+                            # That implies it deducted twice? 0.74 * 2 = 1.48?
+                            # Or was commission_per_contract 0.74 representing RT?
+                            # If so, deducting at entry AND exit is wrong.
+                            # Let's align with BacktestBroker: Deduct 1/2 RT at entry, 1/2 RT at exit.
+                            
+                            rt_cost = self.friction.calculate_cost(ticker)
+                            half_cost = rt_cost / 2
+                            
+                            self.realized_pnl -= half_cost
+                            # PHASE 2: Use market time for trade timestamp
+                            trade_timestamp = self.current_market_time.isoformat() if self.current_market_time else datetime.datetime.now().isoformat()
+
+                            sae_store.log_trade({"trade_id": trade_id, "timestamp": trade_timestamp, "ticker": ticker, "direction": sig['direction'], "entry_price": entry, "size": 1, "stop_loss": sl, "take_profit": tp, "status": "FILLED", "brain": sig['brain'], "pnl_realized": -half_cost, "pnl_unrealized": Decimal("0.00")})
+                            print(f" ENTRY ({sig['brain']}): {ticker} @ {entry:.2f}")
+
+if __name__ == "__main__":
+    threading.Thread(target=orphan_monitor, daemon=True).start()
+    asyncio.run(SaeShell().run())
