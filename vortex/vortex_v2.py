@@ -357,6 +357,30 @@ class MarketState:
 
 @dataclass
 class VortexState:
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = VortexState()
+            # FORCE INITIALIZATION
+            cls._instance.market_prices = {}
+            cls._instance.markets = {}
+            cls._instance.open_trades = {}
+            cls._instance.council_trade = TradeRecord()
+            cls._instance.chimera_trade = TradeRecord()
+            cls._instance.position_entry_lock = asyncio.Lock()
+            # Added for multi-market support
+            cls._instance.warwick_primary = TradeRecord()
+            cls._instance.warwick_hedge = TradeRecord()
+            cls._instance.ai_risk_limit = 500.0
+            cls._instance.ai_override_risk = 100.0
+            cls._instance.consecutive_loss_threshold = 10
+            cls._instance.max_position_size_limit = 8
+            cls._instance.stale_price_threshold = 20.0
+        return cls._instance
+
+    market_prices: dict = field(default_factory=dict) # Symbol -> Price lookup
     # Phase 2: Multi-market state
     markets: dict[str, MarketState] = field(default_factory=dict)
     open_trades: dict = field(default_factory=dict)  # Track active trades globally
@@ -366,6 +390,17 @@ class VortexState:
     council_trade: TradeRecord = field(default_factory=TradeRecord)
     chimera_trade: TradeRecord = field(default_factory=TradeRecord)
     active_trade: TradeRecord = field(default_factory=TradeRecord)
+    
+    # Warwick Engine states
+    warwick_primary: TradeRecord = field(default_factory=TradeRecord)
+    warwick_hedge: TradeRecord = field(default_factory=TradeRecord)
+    
+    # AI Control Parameters
+    ai_risk_limit: float = 500.0
+    ai_override_risk: float = 100.0
+    consecutive_loss_threshold: int = 10
+    max_position_size_limit: int = 8
+    stale_price_threshold: float = 20.0
     
     # Global Session State
     daily_pnl: float = 0.0
@@ -380,6 +415,15 @@ class VortexState:
     max_concurrent_limit: int = 3  # Max symbols to trade simultaneously
     position_count: int = 0  # Number of symbols currently active
     
+    # Local Ticker attributes (deprecated, but kept for backcompat)
+    price: float = 0.0
+    price_timestamp: float = 0.0
+    price_is_stale: bool = True
+    prices: deque = field(default_factory=lambda: deque(maxlen=300))
+    position_side: str = "FLAT"
+    position_size: int = 0
+    position_entry: float = 0.0
+    
     # Broker Truth (Global Account)
     broker_balance: float = 0.0
     broker_starting_balance: float = 0.0
@@ -388,7 +432,6 @@ class VortexState:
     
     # Deprecated fields (maintained for transitional compatibility)
     price: float = 0.0
-    market_prices: dict = field(default_factory=dict)  # Symbol -> Price lookup
     prices: deque = field(default_factory=lambda: deque(maxlen=300))
     position_side: str = "FLAT"
     position_size: int = 0
@@ -397,6 +440,14 @@ class VortexState:
     l2_timestamp: float = 0.0
     orderbook_data: dict = field(default_factory=dict)
     
+    def __post_init__(self):
+        # Ensure critical attributes exist even if dataclass magic fails in some contexts
+        if not hasattr(self, 'market_prices'): self.market_prices = {}
+        if not hasattr(self, 'markets'): self.markets = {}
+        if not hasattr(self, 'open_trades'): self.open_trades = {}
+        if not hasattr(self, 'council_trade'): self.council_trade = TradeRecord()
+        if not hasattr(self, 'position_entry_lock'): self.position_entry_lock = asyncio.Lock()
+
     def get_market(self, symbol: str) -> MarketState:
         if symbol not in self.markets:
             # S-1: Auto-initialize on first access with per-symbol WarwickEngine
@@ -425,6 +476,9 @@ class VortexState:
     trading_disable_reason: str = ""
     ai_risk_limit: float = 500.0  # AI-managed global risk cap
     ai_override_risk: float = 100.0  # AI-managed target risk per trade
+    consecutive_loss_threshold: int = 10 # SOE: reduced from 20 to 10
+    max_position_size_limit: int = 8 # SOE: reduced from 10 to 8
+    stale_price_threshold: float = 20.0 # SOE: reduced from 30s to 20s
     engine_choice_log: dict = field(default_factory=dict)
     last_engine_selection_time: float = 0.0
     
@@ -476,7 +530,7 @@ class VortexState:
 _PROCESSED_FILL_ID_LIMIT = 10000  # Keep last 10k fills (reasonable for multi-hour session)
 _processed_fill_ids: deque = deque(maxlen=_PROCESSED_FILL_ID_LIMIT)
 
-state = VortexState()
+state = VortexState.get_instance()
 suite = None
 mnq = None
 fleet = None  # Fleet agent system for intelligent consultation
@@ -538,6 +592,7 @@ def record_pnl(amount: float, source: str, fill_id: str = None, contracts: int =
     S-1: fill_id prevents double-counting from duplicate broker callbacks.
     S-7: Subtracts estimated commission per round-trip close.
     MATH: Track trades with engine name for expectancy calculation."""
+    state = VortexState.get_instance()
     # S-1: Fill deduplication (uses LRU deque for memory safety)
     if fill_id is not None:
         if fill_id in _processed_fill_ids:
@@ -626,6 +681,7 @@ def validate_trade_pattern(trade_record: TradeRecord, pnl_dollar: float, engine_
         pnl_dollar: The realized PnL in dollars
         engine_name: Which engine (council/chimera/warwick)
     """
+    state = VortexState.get_instance()
     # Skip if no pattern was identified
     if not trade_record.pattern_id:
         return
@@ -657,6 +713,7 @@ def validate_trade_pattern(trade_record: TradeRecord, pnl_dollar: float, engine_
 def _recalculate_math_stats():
     """MATH: Recalculate expectancy, Kelly, and risk of ruin after every trade.
     Check halt conditions. Update AI prompts with math context."""
+    state = VortexState.get_instance()
     if not state.trade_history:
         return
     
@@ -1741,6 +1798,9 @@ async def reconcile_with_broker():
 # ============================================================
 def on_user_trade(args):
     """Handle GatewayUserTrade events from user hub - our own trade fills."""
+    global state
+    if state is None:
+        return
     try:
         if isinstance(args, list) and len(args) >= 1:
             data = args[0] if isinstance(args[0], dict) else args
@@ -1779,6 +1839,9 @@ def on_user_trade(args):
 def on_user_order(args):
     """Handle GatewayUserOrder events -- detect Warwick SL/TP fills.
     Runs in signalr thread. Schedules state changes on main asyncio loop."""
+    global state
+    if state is None:
+        return
     try:
         if isinstance(args, list) and len(args) >= 1:
             data = args[0] if isinstance(args[0], dict) else args
@@ -2533,6 +2596,18 @@ async def ask_claude(features, symbol: str = None):
 
     # S-2: Inject 10/10 "Learned Wisdom" into the prompt
     system_prompt += "\nLEARNED WISDOM: MNQ volatility spikes >35 ATR require Chimera. MES ranging <8 ATR favors Council scalps."
+    
+    # SOE: Risk Budget & Consecutive Loss Context
+    daily_risk_used = state.daily_risk_used
+    risk_remaining = state.ai_risk_limit - daily_risk_used
+    trades_remaining = int(risk_remaining / state.ai_override_risk) if state.ai_override_risk > 0 else 0
+    consecutive_losses = max(state.warwick_consecutive_losses, state.council_consecutive_losses, state.chimera_consecutive_losses)
+    
+    risk_ctx = f"\nRISK BUDGET: Used ${daily_risk_used:.0f} / Total ${state.ai_risk_limit:.0f} | Remaining ${risk_remaining:.0f} (~{trades_remaining} trades)"
+    if consecutive_losses >= 3:
+        risk_ctx += f"\nWARNING: {consecutive_losses} consecutive losses. Are you revenge trading? Check trend alignment."
+    
+    system_prompt += risk_ctx
     system_prompt += "\nGLOBAL RISK CAP: $500. You have authority to OVERRIDE if alpha > 0.9. Include 'override_risk': true in JSON if needed."
 
     if symbol is None:
@@ -5126,6 +5201,7 @@ STRATEGY_THRESHOLDS = {
 
 async def process_market(symbol: str, decision_timer: int):
     """Worker: Encapsulates the 10/10 Priority Dispatcher for one symbol."""
+    state = VortexState.get_instance()
     try:
         mstate = state.get_market(symbol)
         config = INSTRUMENT_CONFIG.get(symbol, INSTRUMENT_CONFIG[TICKER])
@@ -5209,6 +5285,7 @@ async def process_market(symbol: str, decision_timer: int):
 async def control_loop():
     """Main trading control loop - Coordinator for all active markets.
     """
+    state = VortexState.get_instance()
     global market_conn, user_conn
     log.info("Control loop started")
     decision_timer = 0
@@ -6228,6 +6305,7 @@ async def startup():
         """Callback for GatewayQuote events - real-time bid/ask updates.
         Data may arrive as dict or as list [contractId, {quote}] depending on source.
         """
+        state = VortexState.get_instance()
         nonlocal price_update_count
         try:
             contract_id = None
@@ -6304,6 +6382,7 @@ async def startup():
         """Callback for GatewayTrade events - trade tape data.
         Data may arrive as list [contractId, [trades]] or dict.
         """
+        state = VortexState.get_instance()
         nonlocal price_update_count
         try:
             contract_id = None
@@ -6407,6 +6486,7 @@ async def startup():
         log.debug(f"DIRECT WS market error: {data}")
 
     def _on_gateway_quote(args):
+        state = VortexState.get_instance()
         nonlocal price_update_count
         try:
             # Parse contractId and quote data from args
@@ -6442,6 +6522,11 @@ async def startup():
             if quote_contract_id:
                 symbol = CONTRACT_TO_TICKER.get(quote_contract_id)
                 if symbol:
+                    # SAFETY: Ensure state has market_prices attribute
+                    if not hasattr(state, 'market_prices'):
+                        state.market_prices = {}
+                    
+                    state.market_prices[symbol] = mid
                     mstate = state.get_market(symbol)
                     mstate.price = mid
                     mstate.best_bid = float(bid) if bid else 0.0
@@ -6463,7 +6548,10 @@ async def startup():
             log.debug(f"Gateway quote error: {e}")
 
     def _on_gateway_trade(args):
+        global state
         nonlocal price_update_count
+        if state is None:
+            return
         try:
             trade_contract_id = None
             d = args
@@ -6489,6 +6577,7 @@ async def startup():
         """Callback for GatewayDepth events - L2 orderbook data.
         Data format: [contractId, {depth_data}] or just {depth_data}
         """
+        state = VortexState.get_instance()
         try:
             depth_contract_id = None
             d = args
@@ -6564,8 +6653,10 @@ async def startup():
             
             # Sync to global (deprecated)
             if symbol == TICKER:
-                state.orderbook_data = mstate.orderbook_data
-                state.l2_timestamp = mstate.l2_timestamp
+                if hasattr(state, 'orderbook_data'):
+                    state.orderbook_data = mstate.orderbook_data
+                if hasattr(state, 'l2_timestamp'):
+                    state.l2_timestamp = mstate.l2_timestamp
                 
         except Exception as e:
             log.debug(f"L2 routing error: {e}")
