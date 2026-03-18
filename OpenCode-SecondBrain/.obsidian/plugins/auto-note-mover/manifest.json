@@ -1,0 +1,9 @@
+{
+  "id": "auto-note-mover",
+  "name": "Auto Note Mover",
+  "version": "1.0.0",
+  "minAppVersion": "0.12.0",
+  "description": "Automatically moves notes into Sessions, Topics, and Resources folders based on tags and metadata.",
+  "author": "OpenCode AI",
+  "main": "main.js"
+}
