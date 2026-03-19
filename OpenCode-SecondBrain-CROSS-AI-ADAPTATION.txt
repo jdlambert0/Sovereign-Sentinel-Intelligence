@@ -1,0 +1,171 @@
+================================================================================
+OPENCODE SECOND BRAIN — ADAPTATION GUIDE FOR OTHER AI SYSTEMS
+================================================================================
+
+This vault was built for OpenCode but works with any AI CLI tool.
+Two adapters are documented below: Claude Code CLI and Gemini CLI.
+
+--------------------------------------------------------------------------------
+WHAT THIS VAULT DOES
+--------------------------------------------------------------------------------
+
+- Archives every session as a searchable log
+- Stores project/tool knowledge as linked topic notes
+- Provides a plain-text reference file for AI agents
+- Protocol: Search vault before external tools. Log after every session.
+
+--------------------------------------------------------------------------------
+VAULT LOCATION
+--------------------------------------------------------------------------------
+
+C:\KAI\OpenCode-SecondBrain
+
+PLAIN-TEXT USAGE GUIDE (read this first):
+C:\KAI\OpenCode-SecondBrain-USAGE-GUIDE.txt
+
+--------------------------------------------------------------------------------
+PART 1: CLAUDE CODE CLI ADAPTATION
+--------------------------------------------------------------------------------
+
+SETUP:
+1. Install Claude Code CLI: npm install -g @anthropic-ai/claude-code
+2. Open the vault in Claude Code: cd C:\KAI\OpenCode-SecondBrain
+3. Add to CLAUDE.md (Claude Code's system prompt file):
+
+--- CLAUDE.md (add at top) ---
+Read C:\KAI\OpenCode-SecondBrain-USAGE-GUIDE.txt before starting any task.
+After every session, write a log to C:\KAI\OpenCode-SecondBrain\Sessions\
+using the format: YYYY-MM-DD-<task-name>.md
+Before web searches or directory exploration, grep the vault:
+  grep -R "keyword" C:\KAI\OpenCode-SecondBrain\Sessions
+  grep -R "keyword" C:\KAI\OpenCode-SecondBrain\Topics
+---
+
+SESSION LOG COMMAND (run after every task):
+claude --print "Summarize what we did in this session in 3 sentences."
+
+FILE: C:\KAI\OpenCode-SecondBrain\Sessions\YYYY-MM-DD-<task-name>.md
+FORMAT:
+---
+date: YYYY-MM-DD
+task-id: <short-id>
+tags: [#session-log]
+---
+[Summary of session]
+[Decisions made]
+[Changes made]
+## See Also
+- [[Topics/<relevant-topic>]]
+
+SEARCH COMMAND:
+claude --print "Search the vault for [TOPIC]: grep -R [TOPIC] C:\\KAI\\OpenCode-SecondBrain\\Sessions"
+
+--------------------------------------------------------------------------------
+PART 2: GEMINI CLI ADAPTATION
+--------------------------------------------------------------------------------
+
+SETUP:
+1. Install Gemini CLI: gemini install (or via package manager)
+2. Set vault path: export GEMINI_VAULT="C:\KAI\OpenCode-SecondBrain"
+3. Add to GEMINI.md or .gemini/config:
+
+--- Startup prompt (add to config) ---
+Read C:\KAI\OpenCode-SecondBrain-USAGE-GUIDE.txt before starting.
+After each task, archive to Sessions/YYYY-MM-DD-<task-name>.md
+Before external tools, check vault: grep -r "[query]" "$GEMINI_VAULT/Sessions"
+---
+
+SESSION LOG COMMAND:
+gemini ask "Write a 3-sentence summary of this session."
+
+FILE: C:\KAI\OpenCode-SecondBrain\Sessions\YYYY-MM-DD-<task-name>.md
+FORMAT:
+---
+date: YYYY-MM-DD
+task-id: <short-id>
+tags: [#session-log]
+---
+[Summary]
+[Decisions]
+[Changes]
+## See Also
+- [[Topics/<relevant-topic>]]
+
+SEARCH COMMAND:
+gemini ask "grep -R 'keyword' C:\\KAI\\OpenCode-SecondBrain\\Sessions C:\\KAI\\OpenCode-SecondBrain\\Topics"
+
+--------------------------------------------------------------------------------
+PART 3: GENERAL AI CLI ADAPTATION (ANY SYSTEM)
+--------------------------------------------------------------------------------
+
+MINIMUM SETUP (3 steps):
+1. Read C:\KAI\OpenCode-SecondBrain-USAGE-GUIDE.txt at session start
+2. Before external tools: grep the vault for context
+3. After task: write session log to Sessions/YYYY-MM-DD-<task-name>.md
+
+SYSTEM PROMPT ADDITION (add to your AI's config):
+---
+Before starting: Read C:\KAI\OpenCode-SecondBrain-USAGE-GUIDE.txt
+Archive protocol: Sessions go to C:\KAI\OpenCode-SecondBrain\Sessions\
+Topics go to C:\KAI\OpenCode-SecondBrain\Topics\
+Search before web: grep -R "query" C:\KAI\OpenCode-SecondBrain\Sessions C:\KAI\OpenCode-SecondBrain\Topics
+---
+
+BASH HELPER (add to .bashrc or .zshrc):
+vault_search() { grep -R "$1" "C:\\KAI\\OpenCode-SecondBrain\\Sessions" "C:\\KAI\\OpenCode-SecondBrain\\Topics"; }
+vault_log() { echo "---
+date: $(date +%Y-%m-%d)
+task-id: $1
+tags: [#session-log]
+---
+\$2
+## See Also
+- [[Topics/Sovran-AI]]
+" > "C:\\KAI\\OpenCode-SecondBrain\\Sessions\\$(date +%Y-%m-%d)-$1.md"; }
+
+--------------------------------------------------------------------------------
+PART 4: CROSS-AI SESSIONS (MULTIPLE AIs WORKING TOGETHER)
+--------------------------------------------------------------------------------
+
+When multiple AIs (e.g., Claude Code + Gemini CLI) work on the same project:
+
+1. All AIs read the same vault at C:\KAI\OpenCode-SecondBrain
+2. Each AI logs its own sessions to Sessions/<AI>-YYYY-MM-DD-<task>.md
+   Example: Sessions/claude-2026-03-18-trading-fix.md
+   Example: Sessions/gemini-2026-03-18-research.md
+3. Topic notes are shared and cross-linked
+4. See Also sections reference other AIs' work
+5. The AI-USAGE-GUIDE.md in the vault lists all active AI agents
+
+CROSS-REFERENCE TEMPLATE:
+## See Also
+- [[Sessions/claude-2026-03-18-trading-fix]]
+- [[Sessions/gemini-2026-03-18-research]]
+- [[Topics/Vortex]]
+
+--------------------------------------------------------------------------------
+OBISDIDAN PLUGIN NOTES
+--------------------------------------------------------------------------------
+
+The vault includes a basic Auto Note Mover plugin scaffold at:
+C:\KAI\OpenCode-SecondBrain\.obsidian\plugins\auto-note-mover\
+
+This plugin moves notes based on tags:
+  #session-log  -> Sessions/
+  #topic-note   -> Topics/
+  #research     -> Resources/
+
+Enable it in Obsidian via Community Plugins (the manifest.json is included).
+
+--------------------------------------------------------------------------------
+KEY FILES
+--------------------------------------------------------------------------------
+
+C:\KAI\OpenCode-SecondBrain\AI-USAGE-GUIDE.md
+C:\KAI\OpenCode-SecondBrain-USAGE-GUIDE.txt
+C:\KAI\OpenCode-SecondBrain\.opencode.md          (archive protocol)
+C:\KAI\OpenCode-SecondBrain\Templates\            (note templates)
+C:\KAI\OpenCode-SecondBrain\Sessions\             (all session logs)
+C:\KAI\OpenCode-SecondBrain\Topics\              (all topic notes)
+
+================================================================================
