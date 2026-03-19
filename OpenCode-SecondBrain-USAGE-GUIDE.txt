@@ -1,0 +1,124 @@
+================================================================================
+OPENCODE SECOND BRAIN — USAGE GUIDE FOR AI
+================================================================================
+
+VAULT LOCATION:
+C:\KAI\OpenCode-SecondBrain
+
+PLAIN-TEXT VERSION (this file):
+C:\KAI\OpenCode-SecondBrain-USAGE-GUIDE.txt
+
+OBSIDIAN VERSION:
+C:\KAI\OpenCode-SecondBrain\AI-USAGE-GUIDE.md
+
+--------------------------------------------------------------------------------
+HOW TO OPEN THE VAULT
+--------------------------------------------------------------------------------
+
+1. IN OBSIDIAN (recommended):
+   - Open Obsidian
+   - Click "Open vault"
+   - Browse to C:\KAI\OpenCode-SecondBrain
+   - Browse and search all notes
+
+2. VIA FILE EXPLORER:
+   - Navigate to C:\KAI\OpenCode-SecondBrain
+   - Open any .md file in Obsidian or any text editor
+
+3. VIA VS CODE / CURSOR:
+   - Open C:\KAI\OpenCode-SecondBrain as a workspace folder
+
+--------------------------------------------------------------------------------
+VAULT FOLDER STRUCTURE
+--------------------------------------------------------------------------------
+
+Sessions/       — Auto-archived logs of every task/session
+Topics/        — Entity notes: projects, tools, people, concepts
+Archive/       — Historical/imported data
+Imports/       — Bulk imports from external sources
+Resources/     — Research, prompts, documentation
+Templates/     — Note templates for consistent formatting
+
+--------------------------------------------------------------------------------
+KEY FILES
+--------------------------------------------------------------------------------
+
+Topics/Sovran-AI.md       — Sovran trading system hub
+Topics/Vortex.md         — Vortex trading system
+Topics/Hunter-Alpha.md   — Hunter Alpha agent
+Topics/TopStepX.md       — TopStepX broker/API
+.opencode.md             — Archive protocol (what to log and when)
+
+--------------------------------------------------------------------------------
+AI ARCHIVE PROTOCOL
+--------------------------------------------------------------------------------
+
+EVERY SESSION:
+  At the end of every task, write a session log to Sessions/:
+  Sessions/YYYY-MM-DD-<task-name>.md
+
+  With this frontmatter:
+  ---
+  date: YYYY-MM-DD
+  task-id: <short-id>
+  tags: [#session-log]
+  ---
+
+  Body: Summary, Decisions, Changes, See Also.
+
+TOPIC CREATION:
+  If a project or tool is mentioned 3+ times, create a topic note in Topics/.
+
+SEE ALSO RULE:
+  Always append a ## See Also section at the bottom of notes.
+  Link to relevant topic notes. Do NOT modify existing notes inline.
+
+BEFORE EXTERNAL ACTIONS:
+  Before running a web search or exploring a new directory, search the vault first:
+  grep -R "query" OpenCode-SecondBrain/Sessions OpenCode-SecondBrain/Topics
+
+  If relevant context exists, use it instead of searching externally.
+
+--------------------------------------------------------------------------------
+SOVRAN AI MEMORY VAULT (EXTERNAL LINK)
+--------------------------------------------------------------------------------
+
+Sovran's full memory lives in a separate Obsidian vault:
+C:\KAI\obsidian_vault\Sovran AI
+
+This vault contains session logs, plans, research, bug reports, and production
+docs for the autonomous trading system. Browse it for context on trading
+decisions, learnings, and architecture.
+
+--------------------------------------------------------------------------------
+SEARCHING THE VAULT
+--------------------------------------------------------------------------------
+
+Search sessions and topics:
+  grep -R "keyword" OpenCode-SecondBrain/Sessions OpenCode-SecondBrain/Topics
+
+List all topic notes:
+  ls OpenCode-SecondBrain/Topics/
+
+List recent sessions:
+  ls -t OpenCode-SecondBrain/Sessions/ | head -10
+
+--------------------------------------------------------------------------------
+TEMPLATES
+--------------------------------------------------------------------------------
+
+Templates/Session_Log_Template.md  — Template for session logs
+Templates/Topic_Template.md        — Template for topic notes
+
+--------------------------------------------------------------------------------
+QUICK START FOR NEW AI SESSIONS
+--------------------------------------------------------------------------------
+
+1. Read this guide (done)
+2. Check Sessions/ for recent work
+3. Check Topics/ for relevant project/tool notes
+4. Before web search: grep the vault first
+5. After task: write session log to Sessions/
+6. Update See Also links in any new notes
+
+================================================================================
