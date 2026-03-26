@@ -1,0 +1,11 @@
+{
+  "action": "WATCH",
+  "symbol": "MNQ",
+  "confidence": 0.95,
+  "stop_points": 15.0,
+  "target_points": 30.0,
+  "reasoning": "OFI moderating from +28.0 to +13.0. VPIN high (0.073) confirms aggressive participation but flow is currently balanced. No directional breakout. Re-evaluating in 30s.",
+  "thesis": "Aggressive Pre-Market churn. Institutional participants are active (high VPIN) but matched (low OFI). Refusing to trade until a clear imbalance emerges.",
+  "invalidation": "Consistent directional flow > 4 snapshots with structural breakout.",
+  "observation": "OFI +13.0, VPIN 0.073, Session: PRE-MARKET."
+}

@@ -1,0 +1,48 @@
+{
+  "test_date": "2026-03-18",
+  "test_type": "10_turn_stress_test",
+  "status": "complete",
+  "start_time": "2026-03-18T20:10:00Z",
+  "end_time": "2026-03-18T20:45:00Z",
+  "turns": [
+    "turn_001_system_setup.md",
+    "turn_002_simple_trade.md",
+    "turn_003_research_loop.md",
+    "turn_004_wait_signal.md",
+    "turn_005_data_freshness.md",
+    "turn_006_order_latency.md",
+    "turn_007_position_tracking.md",
+    "turn_008_learning_integration.md",
+    "turn_009_memory_system.md",
+    "turn_010_wrapup.md"
+  ],
+  "trades": [],
+  "bugs_found": [
+    {
+      "id": "BUG-012",
+      "description": "Market hours validation missing - trade rejected outside market hours",
+      "severity": "medium",
+      "status": "known"
+    },
+    {
+      "id": "BUG-013",
+      "description": "WebSocket instability - 3 errors per connection but REST fallback works",
+      "severity": "low",
+      "status": "known"
+    }
+  ],
+  "performance_metrics": {
+    "websocket_errors": 3,
+    "order_latency_avg_ms": null,
+    "position_sync_issues": 0,
+    "memory_usage_mb": []
+  },
+  "success_criteria": {
+    "websocket_stable": true,
+    "orders_with_brackets": 0,
+    "position_tracking_accurate": true,
+    "memory_writes": 10,
+    "turns_completed": 10
+  },
+  "summary": "Test complete. System operational but trading blocked by market hours. Full trade cycle requires market hours (8:30 AM - 3:00 PM CT)."
+}

@@ -28,7 +28,7 @@ Goldilocks Calibration (V5):
   - REST bar seeding at startup: eliminates B:0 S:0 warmup dead zone
   - OFI Z-Score gate: institutional order flow must be > 1.5 std devs
   - VPIN gate: probability of informed trading must be > 0.55
-  - Banned phase: 12:30-14:00 CT (early afternoon lunch chop)
+  - Banned phase: 12:30-14:00 CT (defined, currently DISABLED — trading all hours)
 """
 import asyncio
 import json
@@ -706,13 +706,6 @@ def analyze_market(tick: MarketTick, meta: Dict,
     # Gate: need at least 10 bars so regime detection works (not "unknown")
     if len(tick.bars) < 10:
         result["thesis"] = [f"Bars forming ({len(tick.bars)}/10 min)"]
-        return result
-
-    # ── Goldilocks Gate: Banned Phase 12:30-14:00 CT ──
-    ct_now = datetime.now(timezone(timedelta(hours=-5)))
-    ct_minutes = ct_now.hour * 60 + ct_now.minute
-    if 750 <= ct_minutes < 840:  # 12:30=750, 14:00=840
-        result["thesis"] = [f"BANNED PHASE: Early afternoon chop 12:30-14:00 CT (now {ct_now.strftime('%H:%M')} CT)"]
         return result
 
     # ── Goldilocks Gate: OFI Z-Score (institutional displacement) ──

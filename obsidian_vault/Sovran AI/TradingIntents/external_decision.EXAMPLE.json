@@ -1,0 +1,9 @@
+{
+  "symbol": "MNQ",
+  "action": "WAIT",
+  "confidence": 0.55,
+  "stop_points": 10.0,
+  "target_points": 20.0,
+  "reasoning": "Replace with your note; WAIT until you want a live stand-in.",
+  "expires_at": "2030-01-01T00:00:00+00:00"
+}

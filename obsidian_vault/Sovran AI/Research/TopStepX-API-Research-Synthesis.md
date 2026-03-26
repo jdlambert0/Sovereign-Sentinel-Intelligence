@@ -1,0 +1,19 @@
+- Topic: TopStepX SL/TP Brackets - Native API vs SDK
+- Date: 2026-03-18
+- Sources:
+  - ProjectX API: /api/Order/place bracket objects
+  - TopStepX Auto-OCO Brackets documentation
+  - TopStepX settings: Position Brackets vs Auto-OCO
+- Key Findings:
+  - Native REST API supports atomic bracket orders via a single call with stopLossBracket and takeProfitBracket.
+  - SL must be Stop Market (type 4) and SL ticks must be negative for LONG entries.
+  - TP should be a Limit (type 1) with positive ticks for LONG.
+  - SDK path place_bracket_order() is sequential and not atomic; conflicts with Position Brackets when enabled.
+  - Disable Position Brackets to use the native atomic bracket approach or switch to Auto-OCO Brackets if appropriate.
+- Practical Guidance:
+  - Use REST atomic bracket for automation-heavy tasks; use Auto-OCO or SDK when safe and supported.
+  - Always verify with an end-to-end test harness; ensure you have a clean slate before tests (cancel existing orders, close positions).
+- Observations / Next Steps:
+  - Integrate native bracket call into Sovran AI trading loop; replace old SL/TP logic.
+  - Build a robust end-to-end test harness that includes cleanup and verification steps.
+  - Log outcomes to Obsidian for traceability and auditing.

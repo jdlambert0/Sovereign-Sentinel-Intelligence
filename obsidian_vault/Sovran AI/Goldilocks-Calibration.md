@@ -37,7 +37,7 @@ tick_count — so the first scan cycle has real data.
 
 - [x] OFI Z-Score gate in `live_session_v5.py` (gate at `analyze_market`)
 - [x] VPIN gate in `live_session_v5.py` (gate at `analyze_market`)
-- [x] Banned phase 12:30-14:00 CT hard block in `live_session_v5.py`
+- [ ] Banned phase 12:30-14:00 CT hard block — **DISABLED** (trading all hours by user decision 2026-03-26)
 - [x] REST bar seeding at startup (`_seed_historical_bars`)
 - [ ] LLM consensus gate (currently bypassed — pure signal scoring mode)
 - [ ] High-conviction combo (OFI_Z > 2.0 AND VPIN > 0.70) bonus scoring
