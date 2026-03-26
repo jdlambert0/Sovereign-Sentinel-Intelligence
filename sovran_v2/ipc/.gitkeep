@@ -1,0 +1,4 @@
+# IPC Directory for File-Based AI Communication
+
+This directory contains request/response files for LLM-agnostic trading.
+Files are created and deleted during operation - this .gitkeep ensures the directory exists in git.

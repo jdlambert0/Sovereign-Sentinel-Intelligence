@@ -1,42 +1,79 @@
-# Environment / Secrets
-config/.env
-.env
-*.env
-
 # Python
-*.pyc
-*.pyo
 __pycache__/
-.venv/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
 venv/
+ENV/
+env/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Secrets & Credentials
+.env
+config/.env
+*.key
+*.pem
+*.crt
+api_keys.json
+
+# Logs
+*.log
+logs/
+*_loop.log
+ralph_*.log
+
+# State files (except templates)
+state/*.json
+!state/*_template.json
+*_loop_status.json
+loop_status.json
+trading_loop_status.json
+meta_loop_status.json
+
+# IPC runtime files
+ipc/request_*.json
+ipc/response_*.json
+
+# Trading data
+*.db
+*.sqlite
+*.sqlite3
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Testing
-.pytest_cache/
-htmlcov/
-.coverage
-
-# Logs
-*.log
-*.pid
-
-# Runtime state (trade history is gitignored via state/.gitignore)
-state/trade_history.json
-state/kaizen_log.json
-
-# Obsidian runtime notes (gitignored via obsidian/.gitignore)
-obsidian/*.md
-
-# Result snapshots (large, noisy)
-live_session_results.json
-live_session_v2_results.json
-live_session_v3_results.json
-live_session_v4_results.json
-live_test_results.json
+# Temporary files
+*.tmp
+*.temp
+.cache/
