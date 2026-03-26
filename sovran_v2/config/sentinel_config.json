@@ -1,0 +1,15 @@
+{
+    "cycle_seconds": 15,
+    "health_check_seconds": 30,
+    "position_check_seconds": 10,
+    "obsidian_update_seconds": 300,
+    "market_open_hour": 17,
+    "market_open_minute": 0,
+    "market_close_hour": 16,
+    "market_close_minute": 0,
+    "max_market_data_stale_seconds": 60,
+    "max_consecutive_errors": 5,
+    "contract_id": "CON.F.US.MNQM26",
+    "tick_size": 0.25,
+    "tick_value": 0.50
+}

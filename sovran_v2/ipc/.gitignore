@@ -1,0 +1,4 @@
+request_*.json
+response_*.json
+!README.md
+!.gitignore

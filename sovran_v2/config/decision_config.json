@@ -1,0 +1,16 @@
+{
+    "ai_provider": "file_ipc",
+    "ai_model": "llama3.1:70b",
+    "ai_api_key": "",
+    "ai_endpoint": "http://localhost:11434",
+    "ai_ipc_dir": "ipc",
+    "ai_timeout_seconds": 10.0,
+    "ai_max_retries": 2,
+    "ai_ipc_poll_interval": 0.5,
+    "ai_ipc_max_wait_seconds": 120.0,
+    "min_conviction_to_trade": 70.0,
+    "min_seconds_between_trades": 120,
+    "max_trades_per_session": 20,
+    "recent_trades_in_prompt": 10,
+    "_comment": "ai_provider options: 'file_ipc' (Option C), 'ollama' (Option A), 'openrouter' (Option B)"
+}

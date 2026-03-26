@@ -1,0 +1,17 @@
+{
+    "max_trailing_drawdown": 4500.0,
+    "daily_loss_limit": 450.0,
+    "drawdown_circuit_breaker": 500.0,
+    "kelly_fraction_multiplier": 0.5,
+    "max_risk_per_trade_dollars": 150.0,
+    "min_risk_reward_ratio": 1.5,
+    "max_position_size": 5,
+    "min_stop_atr_multiplier": 1.0,
+    "max_stop_atr_multiplier": 3.0,
+    "default_stop_atr_multiplier": 1.5,
+    "assumed_win_rate": 0.50,
+    "assumed_avg_win_loss_ratio": 1.8,
+    "max_ruin_probability": 0.05,
+    "min_conviction_to_trade": 55.0,
+    "initial_balance": 150000.0
+}

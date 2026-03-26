@@ -1,0 +1,22 @@
+{
+    "contracts": [
+        "CON.F.US.MNQ.M26",
+        "CON.F.US.MES.M26",
+        "CON.F.US.MYM.M26",
+        "CON.F.US.M2K.M26",
+        "CON.F.US.MGC.J26",
+        "CON.F.US.MCL.K26",
+        "CON.F.US.SIL.K26",
+        "CON.F.US.MHG.K26",
+        "CON.F.US.MNG.K26",
+        "CON.F.US.MBT.H26"
+    ],
+    "cycle_seconds": 15,
+    "health_check_seconds": 30,
+    "position_check_seconds": 10,
+    "obsidian_update_seconds": 300,
+    "max_market_data_stale_seconds": 60,
+    "max_consecutive_errors": 5,
+    "dry_run": false,
+    "_comment": "Default pool: all micro contracts (low cost, diversified). Add full-size for more markets."
+}

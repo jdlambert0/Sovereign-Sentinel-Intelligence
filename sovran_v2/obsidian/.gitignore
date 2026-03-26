@@ -1,0 +1,4 @@
+# Generated Obsidian notes (auto-created by Sovran)
+# Keep .gitignore only, actual notes are generated at runtime
+*.md
+!.gitignore

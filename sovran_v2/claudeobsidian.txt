@@ -1,0 +1,141 @@
+Chapter 1: Building a Local AI Operating System
+0:011 secondIn this video, I'm going to show you how to wire cloud code directly into Obsidian to build an AI operating system that literally runs my business and keeps me on track. I'll explain both
+0:099 secondsplatforms for those of you coming in fresh. And I'll also explain why I don't use either in isolation. Then I'll show you how to set it up from scratch. I'll show you the architecture. I'll show you
+0:1616 secondswhat my current iteration looks like and how I use it day-to-day. Let's get it.
+0:2020 secondsSo, for my AI friends that are already using Cloud Code, you've most likely heard people talking about Obsidian and vice versa. If you're already an Obsidian expert, you've most likely heard people talking about Cloud Code.
+0:2929 secondsThis video is for both of you because these two platforms are absolutely best friends. And here's why. Coming from the AI side, you already know that Cloud Code is awesome. You can build things,
+Chapter 2: Why Claude Code Needs Obsidian (The Amnesia Problem)
+0:3838 secondsyou can write code, automate stuff, just an incredible tool. Except the biggest downside with cloud code is every time you use it, everything's gone.
+0:4545 secondsEverything you talked about, every decision, your clients, your projects,
+0:4848 secondsall that stuff gone. You're reexplaining yourself every single time. And a lot of folks open Cloud Code inside individual project folders, right? which is
+0:5656 secondsfantastic, but it's very much like having one specific employee for one specific task and no way for all of those different employees to meet in the
+1:031 minute, 3 secondsmiddle and talk to each other. That's specifically what I'm using Obsidian for. I've got one large like umbrella folder that I'm treating almost like the whole organization, right? Everything is
+1:121 minute, 12 secondsbroken down into their own separate departments. Um, and it doesn't matter what agent I'm talking to, whether it's Claude, Gemini, or Codeex. It doesn't matter what project or task or anything
+1:211 minute, 21 secondslike that. We've always got full context, always full memory, always up to date, always fully aware. That's what Obsidian gives you. It's a home base,
+1:271 minute, 27 secondsright? All your agents all the time knowing exactly what's going on as a whole. Otherwise, Cloud Code is brilliant, but it's an amnesia. So, if you're coming in from the Obsidian side,
+Chapter 3: The Problem with Traditional Productivity Apps
+1:351 minute, 35 secondsyou kind of already know what you're sitting on. It's a fantastic app with all the plugins and markdown files and local storage and all that stuff.
+1:411 minute, 41 secondsExcept, be honest, like every productivity app, you tend to spend more time scrolling around customizing than it actually saves you, right? Like so for example, I'm looking for something.
+1:521 minute, 52 secondsI'm scrolling through all these different subfold folders. I'm trying to find something. Where was that note about whatever? You know, you're
+1:591 minute, 59 secondsupdating wikis. You're doing all that stuff just to make sure that this works as advertised. And that is a massive time. So instead of navigating and fighting with this stuff, what if you
+2:072 minutes, 7 secondscould just talk to it? It handles all the filing, the routing, organization,
+2:112 minutes, 11 secondsall of it. That's what cloud code gives you in Obsidian. It like gives your vault a little librarian that can go and like sort things out, pull up different
+2:182 minutes, 18 secondsdocuments on request. It makes the experience seamless. Hopefully you guys can see where I'm going with this. So,
+Chapter 4: Obsidian Vault Setup for AI Agents
+2:232 minutes, 23 secondslet's set this up and we can get into the nuts and bolts of it. So, step one would be download Obsidian. If you go to obsidian.md, you'll be met with this.
+2:292 minutes, 29 secondsDefaults to Windows, but if you click this guy here, you can find it for Windows, Mac, Linux, whatever you need.
+2:352 minutes, 35 secondsOkay. Then you're going to be met with the once you install it, that is you're going to be met with this page right here. There'll be empty on the left. We need to start a new vault. Okay, so
+2:432 minutes, 43 secondswe're going to create a new vault. I recommend keeping this somewhere easy.
+2:462 minutes, 46 secondsLike I just put this in the documents in my Windows environment. And tada. Okay,
+2:502 minutes, 50 secondsso we're going to find somewhere that's easy to find or just like kind of out of the way that you won't accidentally delete or anything wild like that. So I'm just going to go ye and let's find
+2:582 minutes, 58 secondswhere we're going to put it folder create. All right, so this is our brand new Obsidian Vault. Hey yo, we will be
+3:063 minutes, 6 secondslooking at the same thing. None of these plugins come preloaded or anything. This is essentially just like the empty folder. We're going to go over to the settings, go to community plugins, and
+Chapter 5: Best Obsidian Plugins for Claude Code Integration
+3:153 minutes, 15 secondsthen go turn on. Tada. And we are going to browse. The very first thing we're going to download is the terminal plugin.
+3:253 minutes, 25 secondsClick install and enable. Good to go. Then we're going to get templater,
+3:323 minutes, 32 secondswhich is right here,
+3:353 minutes, 35 secondsand enable that one. It's going to give us this. Then I want you to go over to the core plugins here and we're going to find web browser and just turn that on.
+3:423 minutes, 42 secondsWeb viewer boop right there. So for your web viewer settings, you get to choose your search engine. Duck.go is what they use by default and I find that's fine. H
+3:503 minutes, 50 secondsyou can go to Brave, Bing, Google or something different. Open external links allow. Yeah. Okay, cool. Um this is honestly all you really need to get started because this will allow you to
+3:583 minutes, 58 secondspull in cloud code or some other AI agent and have it interact with this vault. Okay, so I'm going to go over here and just show you appearance as well. if you want to change the themes.
+4:074 minutes, 7 secondsThe one I'm using is called PLN. Uh I like the rainbow sidebar because I'm vain like that. So, we're just going to
+4:144 minutes, 14 secondsinstall and use Tada. There you go. I realized we didn't cover this. You do need to install cloud code on your computer. So, just search up Cloud Code
+Chapter 6: Installing Claude Code & Anthropic Setup
+4:214 minutes, 21 secondsand then go to the the first result, the one with Anthropic, and then check out documentation. Um so, find the one
+4:294 minutes, 29 secondsthat's appropriate for your platform. If you're on Mac, it'll be this one, Windows PowerShell, Command, whatever.
+4:344 minutes, 34 secondsand then go down and click the quick start guide. That'll walk you through the exact steps needed to log into your Anthropic accounts and get this going.
+4:424 minutes, 42 secondsOkay. Okay. So, I'm going to move the terminal down to the bottom so I know where it is exactly. Open this up. Make sure to click integrated like so. And
+Chapter 7: Initializing Your AI Assistant Inside Obsidian
+4:514 minutes, 51 secondshere we are. So, I'm going to start by going with Claude. And this will start Claude code. Easy as that. Okay. So, you see how we're like almost almost there.
+5:025 minutes, 2 secondsSo very first thing we're going to do is I'm going to go slash init. And all this does is if I don't know if you guys can read this, initialize a new claude.md
+5:095 minutes, 9 secondsfile with codebased documentation. This is where claude writes down its memories and whatnot. Do that. It is digging in.
+5:165 minutes, 16 secondsSo now what we're doing here is Claude is just getting acquainted with what's going on in this vault here. I've got the terminal window here as well. Okay.
+5:235 minutes, 23 secondsSo you're just going to go through and just allow it permissions to make edits inside the main folder. Um it's just getting acquainted like we were saying
+5:315 minutes, 31 secondshere. Okay. All right, we are getting there. Do you want to create a claude.md file? Heck yes, I do. Great. So now you can see this has been added to the
+5:395 minutes, 39 secondsgraph. We've got claude at the root and we're ready to get rolling. Something else I want to address. The terminal plugin sometimes has some trouble
+Chapter 8: Fixing Obsidian Terminal Resizing Errors
+5:475 minutes, 47 seconds[laughter] out of the box. Like it doesn't get sized properly. There are two issues that I've run into where that happens. It's either the error 90009
+5:555 minutes, 55 secondswhere the plug-in resizer doesn't really work properly or it renders incorrectly with the wrong sizes. I've got the prompt in order to fix both of those situations that I'll leave down below.
+6:056 minutes, 5 secondsI'm actually just going to run that in my other vault right here just to make sure that it is, you know, looks nice because you can see this is all garbled
+6:146 minutes, 14 secondswhich means we ran into that issue which is why we have this here and it's going to work just fine. Okay, awesome. Says both fixes are done. Here's the summary.
+6:216 minutes, 21 secondsFix this, fix that. Next step, restart Obsidian for the data.json to take effect. Fantastic.
+6:286 minutes, 28 secondsSo, we've made all of our basic changes,
+6:306 minutes, 30 secondsright? You can see that now we have the option to check out the web browser,
+6:336 minutes, 33 secondssearch whatever you want. You can even like run design apps from the top. This is like an advantage of of [clears throat] doing things like this.
+6:396 minutes, 39 secondsYou've got your UI down up here and your back end right here. But like this is this is all fine, but if we're looking at it, it's it's still pretty empty.
+Chapter 9: Structuring Folders for AI Memory & Context
+6:476 minutes, 47 secondsLike what do we do from here? So, this is kind of the exciting part. You can literally just sit and type to this AI agent and explain the folder structure that you want it to have. You can talk
+6:556 minutes, 55 secondsto it about its manners, tell it how you want to behave and all that stuff, and it'll actually just set it up for you.
+7:007 minutesYou can import existing folders. You can open Obsidian in your existing project folder, however it works for you,
+7:077 minutes, 7 secondshowever you want this to be organized. I guess that's the beauty of it. Tell Claude exactly what you want to have happen, and it'll just go forth and do that. This here is the brain. This is
+7:167 minutes, 16 secondswhat tells your AI agent what's going on. tells it its rules, all that sort of stuff. It it's what your agent will actually look at first just to get a lay
+7:237 minutes, 23 secondsof the land. Okay? So, you can tell Claude whatever it is that you want it to do, how to behave. Like I call it,
+7:297 minutes, 29 secondsyou know, giving the AI manners and it'll update this claude.md file, right?
+7:337 minutes, 33 secondsAs you can see, it says you've got these plugins to work with. The vault structure is like this. Working in this vault, everything is in markdown files.
+7:397 minutes, 39 secondsYou got wiki links and it knows exactly what to do. Okay. So, I'm going to go over to my other already established vault here, and I'll give you an idea to the structure that like works for me.
+Chapter 10: My Vault Architecture: Human vs. Machine Brain
+7:487 minutes, 48 secondsOkay. So, the one thing I really wanted to make sure was that my ideas were just my ideas. I never wanted to be looking through my journal and it was a summary
+7:567 minutes, 56 secondsof what I said, like the AI was just paraphrasing for me or like helping me out. I wanted to make sure that my voice was preserved at all costs. So, I've
+8:038 minutes, 3 secondsbroken this down into like left and right hemisphere of this like AI second brain. This side is just my voice,
+8:108 minutes, 10 secondsthings I have explicitly said, tasks that I'm doing, and like AI can read that, but it can't write to it unless I give it specific instructions. Okay. The
+8:188 minutes, 18 secondsother side is the machine side. And like that's everything else that has all of my AI content. So any research it does,
+8:248 minutes, 24 secondsany sort of skills, SOPs, code, that kind of thing, that all lives in the other folder. This is also where I put
+8:318 minutes, 31 secondsmy templates and SOPs um for the AI agents to read later. So that was the main idea behind how I organized my folders, right? Just making sure there
+8:388 minutes, 38 secondswas a clear distinction between human and AI content. Everything else just kind of fell into place from there,
+8:438 minutes, 43 secondsright? So the human side is my relationships, my daily notes, my projects, you know, things like that. The machine side is all the SOPs,
+8:518 minutes, 51 secondstemplates, scripts, research results,
+8:538 minutes, 53 secondsand different things that the AI actually comes up with and helps me out with. Um, that includes workflows and just different automated tasks. I put that in here, too, and it's working out
+Chapter 11: Live Demo: Automated Task Routing & Data Logging
+9:019 minutes, 1 secondreally well for me. So, let me show you how they work together. Uh, I'm just going to go with it's going to be slash new. And this is just like new idea. So I can I can type whatever I want. I can
+9:099 minutes, 9 secondseven like rapid fire and really try and break this thing and give it like six different things to deal with. It'll route that to the appropriate file or folder or project or whatever and I
+9:189 minutes, 18 secondsdon't have to go through and mess around with opening these different subfolders and all that other action like that.
+9:239 minutes, 23 secondsOkay. So I'm just going to type something in and it'll know exactly what to do. Okay. So for example, I gave it a couple different things. I said send a message to this person waiting for her to schedule a meeting. Had four cups of
+9:329 minutes, 32 secondscoffee. ate a pork chop and a burger bun. 30 minutes on the exercise bike.
+9:359 minutes, 35 secondsI'm filming the Obsidian Claw Code video right now at this time. And I want to look into temptizing the cold email campaign. It'll know exactly what all that means, right? It's looking through
+9:449 minutes, 44 secondsthe people in the folder, looking through the daily notes, it's looking through my projects, looking through my content calendar, all that stuff, and it's automatically routing, and I don't
+9:539 minutes, 53 secondshave to do anything. I can just leave now, right? Which is the biggest single unlock for people already in the Obsidian vault. This is what you've been
+10:0010 minuteswaiting for. This is why people in the Obsidian communities are talking a lot about clawed code is because it solves the biggest pain point that you folks have. Okay, so check out the results
+10:0810 minutes, 8 secondshere. Done. Movement 30 minutes bike logged. My food has been logged,
+10:1310 minutes, 13 secondshydration logged, confirmed the update to that person, confirmed the update to my content calendar, and created a task
+10:2010 minutes, 20 secondsregarding the templatization of my cold email pipeline. Everything done. It keeps going though. So, you might be wondering how I got here. And literally,
+Chapter 12: Using Claude Code to Generate Daily Prep Lists
+10:2710 minutes, 27 secondsit just came from talking to Claude Code. I worked backwards from my ideal outcome and just told it what I wanted
+10:3410 minutes, 34 secondsto have happen when I typed this. I want you to organize it for me. Right? So,
+10:3910 minutes, 39 secondsanother thing that was really important to me was how I start my day. I was really big on lists. Like coming from restaurant world and you know being
+10:4810 minutes, 48 secondsorganized in logistics and uh residential, commercial moving, that kind of thing. Uh organization is huge.
+10:5310 minutes, 53 secondsBut most of my mornings be like I go work out and then come back and spend 30 minutes writing down like a prep list for the day or like things that I'm supposed to do. So I wanted AI to do that for me, right? And it's really
+11:0111 minutes, 1 secondbeneficial having it do so in this Obsidian environment where it's got access to everything that I'm doing and my daily notes and all sorts of stuff
+11:0911 minutes, 9 secondslike that. So I did the same thing with starting my day. I go slash today and it'll go and run this workflow that brings in my email, my calendar, run
+11:1711 minutes, 17 secondsthrough my daily notes, my project, like the whole vault, everything like that.
+11:2011 minutes, 20 secondsAnd then it'll assess and output my tasks for the day, what I should start with, where I'm maybe slipping, or if there's something that I said I was
+11:2911 minutes, 29 secondsgoing to do and haven't that's been on the docket for a couple days, it'll give me trash and be like, you need to do this first kind of thing. Just keeping me completely on track and honest with
+11:3711 minutes, 37 secondsit. Okay, so check this out. This is my actual notes and plan for the day. I can open this up in the the daily notes where it's nicely formatted and I can like, you know, cross things off. But
+11:4511 minutes, 45 secondsessentially, it's like, check it out. No major meetings to check out. Here's some emails that might need your attention.
+11:4911 minutes, 49 secondsum frogs to eat, things that need my attention first in the day are these things, right? And it's not just the productivity or like note-taking side of things. You can actually go and build
+Chapter 13: Building Coding Workflows & Apps Inside Obsidian
+11:5711 minutes, 57 secondstools in this platform as well. This is why I like this so much is because every I don't ever have to leave this window.
+12:0312 minutes, 3 secondsWhether I'm building a tool, whether I'm running, you know, different email campaigns, answering stuff, building out like web apps with Stitch. That's why I brought this up was just to show you how
+12:1112 minutes, 11 secondseverything is in one window. I can do whatever I want. So, for example, just the other day, I built out a cold email pipeline for someone. That's what I was kind of talking about before where it goes and it scrapes 7,000 leads a week,
+Chapter 14: Automated Cold Email Pipeline Build
+12:2112 minutes, 21 secondsgoes and validates those with True List straight from our scrape and then generates different campaigns, 24 in fact, and runs those campaigns from
+12:2912 minutes, 29 secondsinstantly. We also use reply rate as a success metric and it improves copy as time goes on. I did that all from here.
+12:3412 minutes, 34 secondsLike this is a fully functioning dev tool. Cloud Code kicks ass. It's not like it's watered down because it doesn't look the same as uh what you're used to. There's also the VS Code editor
+12:4312 minutes, 43 secondsplugin, right, where you can go and read or edit code right here. It works gang busters anyway. But the nice thing is that anything you do, you can turn into
+12:5012 minutes, 50 secondstemplates or workflows so that anything I do repeatedly, I can just go and give it that command and my Claude Code instance will know exactly what to do
+12:5812 minutes, 58 secondswithout this massive prompt. Just for yet another example, something I do a lot of is I'll look through YouTube comments for video ideas. So instead of going through and looking at comments
+13:0513 minutes, 5 secondsmanually to find patterns or having Claude code watch my YouTube channel and uh do that with a prompt every single time, I just go slash comments and it'll
+13:1413 minutes, 14 secondsread my comments and what you guys are talking about and I can get ideas for the next video. Anyway, the TLDDR of it is these two programs complement each other perfectly because they fill the
+Chapter 15: Why Local AI Architecture is Future-Proof
+13:2313 minutes, 23 secondsgaps the others leave. The other beautiful part of this is that this is all local. Let's say I run out of cloud rate limits, I don't have to wait. I can use the exact same architecture with a
+13:3113 minutes, 31 secondsdifferent agent. Or like let's say Anthropic goes belly up or for some reason I don't have that access anymore.
+13:3613 minutes, 36 secondsI'm just using the terminal. So as long as there are AI agents, I can use this exact architecture moving forward. So anyway, that's the big deal. That's why if you're in the cloud code community,
+13:4513 minutes, 45 secondsyou're hearing about Obsidian. That's why if you're in the Obsidian community,
+13:4713 minutes, 47 secondsyou're hearing about Cloud Code because these things are perfect for each other.
+13:5013 minutes, 50 secondsSo I really want you guys to keep me posted and let me know how you guys are using these together. Talk to me about how you're organizing stuff. That's really cool. But if you want this exact workflow that I've uh just laid out
+14:0014 minutesright here, you can go to my school community in tools and agents and you can download it for yourself. It comes with install. So you just honestly double click or run a script and everything loads for you just like that.
+14:1014 minutes, 10 secondsIt'll ask for an interview so you can tell it the uh way you want it to behave in different manners and stuff. And you also with that get all of these different workflows that I was talking
+14:1714 minutes, 17 secondsabout. It it comes with it. We're updating this all the time so that it's current with what I'm actually using.
+14:2214 minutes, 22 secondsIt's not just that. You get all the other AI tools that I'm building out for myself and others, and you get access to a growing network of almost 700 other members that are in here doing the exact
+14:3014 minutes, 30 secondssame thing. It's a fantastic place to be. Link to that will be in the description. Thanks for hanging out. Sub for more and I'll catch you in the next
+
+Sync to video time

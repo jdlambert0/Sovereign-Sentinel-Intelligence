@@ -1,0 +1,42 @@
+# Environment / Secrets
+config/.env
+.env
+*.env
+
+# Python
+*.pyc
+*.pyo
+__pycache__/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Logs
+*.log
+*.pid
+
+# Runtime state (trade history is gitignored via state/.gitignore)
+state/trade_history.json
+state/kaizen_log.json
+
+# Obsidian runtime notes (gitignored via obsidian/.gitignore)
+obsidian/*.md
+
+# Result snapshots (large, noisy)
+live_session_results.json
+live_session_v2_results.json
+live_session_v3_results.json
+live_session_v4_results.json
+live_test_results.json
