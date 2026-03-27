@@ -314,17 +314,17 @@ def run_ai_trading_session(cycles: int = 360, interval: int = 10) -> Tuple[bool,
     3. Monitor for duration
     4. Return results
     """
-    logger.info(f"🚀 Starting AI trading session ({cycles} cycles × {interval}s)")
+    logger.info(f"[LAUNCH] Starting AI trading session ({cycles} cycles × {interval}s)")
 
-    # Ensure AI Decision Engine is running
+    # Ensure Autonomous IPC Responder is running
     ai_engine_process = subprocess.Popen(
-        ["python", "ipc/ai_decision_engine.py"],
+        ["python", "ipc/autonomous_responder.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True
     )
 
-    logger.info("AI Decision Engine started")
+    logger.info("Autonomous IPC Responder started")
     time.sleep(2)  # Let it initialize
 
     # Start V5

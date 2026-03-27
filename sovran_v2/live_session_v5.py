@@ -76,8 +76,8 @@ SCAN_CONTRACTS = [
     "CON.F.US.MES.M26",
     "CON.F.US.MYM.M26",
     "CON.F.US.M2K.M26",
-    "CON.F.US.MGC.J26",
-    "CON.F.US.MCLE.K26",
+    "CON.F.US.MGC.M26",
+    "CON.F.US.MCLE.M26",
 ]
 
 CONTRACT_META = {
@@ -85,8 +85,8 @@ CONTRACT_META = {
     "CON.F.US.MES.M26": {"name": "MES", "tick_size": 0.25, "tick_value": 1.25, "point_value": 5.00, "asset": "equity_index"},
     "CON.F.US.MYM.M26": {"name": "MYM", "tick_size": 1.00, "tick_value": 0.50, "point_value": 0.50, "asset": "equity_index"},
     "CON.F.US.M2K.M26": {"name": "M2K", "tick_size": 0.10, "tick_value": 0.50, "point_value": 5.00, "asset": "equity_index"},
-    "CON.F.US.MGC.J26": {"name": "MGC", "tick_size": 0.10, "tick_value": 1.00, "point_value": 10.00, "asset": "metals"},
-    "CON.F.US.MCLE.K26": {"name": "MCL", "tick_size": 0.01, "tick_value": 1.00, "point_value": 100.00, "asset": "energy"},
+    "CON.F.US.MGC.M26": {"name": "MGC", "tick_size": 0.10, "tick_value": 1.00, "point_value": 10.00, "asset": "metals"},
+    "CON.F.US.MCLE.M26": {"name": "MCL", "tick_size": 0.01, "tick_value": 1.00, "point_value": 100.00, "asset": "energy"},
 }
 
 # Risk parameters
