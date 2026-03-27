@@ -89,20 +89,25 @@ class ObsidianManager:
             logger.warning(f"Kaizen backlog not found: {backlog_file}")
             return []
 
-        with open(backlog_file) as f:
+        with open(backlog_file, encoding='utf-8') as f:
             content = f.read()
 
         # Simple parsing: find P0/P1 items
         items = []
         lines = content.split('\n')
         current_item = None
+        current_priority = None
 
-        for line in lines:
-            if line.startswith('### ') and any(p in line for p in ['P0', 'P1']):
+        for i, line in enumerate(lines):
+            # Check for priority section headers
+            if line.startswith('## P0') or line.startswith('## P1'):
+                current_priority = "P0" if "P0" in line else "P1"
+            # Check for numbered item headers under a priority section
+            elif line.startswith('### ') and current_priority:
                 # New priority item
                 current_item = {
                     "title": line.replace('###', '').strip(),
-                    "priority": "P0" if "P0" in line else "P1",
+                    "priority": current_priority,
                     "details": []
                 }
                 items.append(current_item)
@@ -117,7 +122,7 @@ class ObsidianManager:
         state_file = self.vault_dir / "system_state.md"
 
         # For now, just append to the file
-        with open(state_file, 'a') as f:
+        with open(state_file, 'a', encoding='utf-8') as f:
             f.write(f"\n\n## Meta-Loop Update - {datetime.now(timezone.utc).isoformat()}\n\n")
             for key, value in updates.items():
                 f.write(f"- **{key}:** {value}\n")
@@ -128,8 +133,8 @@ class ObsidianManager:
         """Log completed Kaizen item."""
         backlog_file = self.vault_dir / "kaizen_backlog.md"
 
-        with open(backlog_file, 'a') as f:
-            f.write(f"\n\n### ✅ COMPLETED: {item_title}\n")
+        with open(backlog_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n\n### [OK] COMPLETED: {item_title}\n")
             f.write(f"- **Completed:** {datetime.now(timezone.utc).isoformat()}\n")
             f.write(f"- **Result:** {result}\n")
 
@@ -255,10 +260,10 @@ def run_tests() -> bool:
         )
 
         if result.returncode == 0:
-            logger.info("✅ All tests passed")
+            logger.info("All tests passed")
             return True
         else:
-            logger.error(f"❌ Tests failed:\n{result.stdout}\n{result.stderr}")
+            logger.error(f"[ERROR] Tests failed:\n{result.stdout}\n{result.stderr}")
             return False
 
     except Exception as e:
@@ -284,11 +289,11 @@ def git_commit_and_push(message: str, dry_run: bool = False) -> bool:
         # Push to remote
         subprocess.run(["git", "push", "origin", "HEAD"], check=True)
 
-        logger.info("✅ Git commit and push successful")
+        logger.info("Git commit and push successful")
         return True
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Git operation failed: {e}")
+        logger.error(f"Git operation failed: {e}")
         return False
 
 
@@ -299,7 +304,7 @@ def main():
     parser.add_argument("--sleep-between", type=int, default=300, help="Seconds between iterations (default 300)")
     args = parser.parse_args()
 
-    logger.info(f"🔄 Ralph Wiggum META-LOOP starting (max iterations: {args.max_iterations}, dry-run: {args.dry_run})")
+    logger.info(f"[LOOP] Ralph Wiggum META-LOOP starting (max iterations: {args.max_iterations}, dry-run: {args.dry_run})")
 
     status = MetaLoopStatus(LOOP_STATUS_FILE)
     obsidian = ObsidianManager(OBSIDIAN_DIR)
@@ -326,7 +331,7 @@ def main():
         success, description = kaizen_engine.apply_top_priority_fix(kaizen_items)
 
         if success:
-            logger.info(f"✅ Fix applied: {description}")
+            logger.info(f"Fix applied: {description}")
             status.increment("fixes_applied")
 
             # PHASE 3: Run tests
@@ -336,7 +341,7 @@ def main():
                 status.increment("tests_run")
 
                 if not tests_passed:
-                    logger.error("❌ Tests failed - rolling back changes")
+                    logger.error("Tests failed - rolling back changes")
                     # In real implementation, would git reset here
                     break
             else:
@@ -361,7 +366,7 @@ def main():
 
                     obsidian.log_kaizen_completion(kaizen_items[0]["title"], description)
         else:
-            logger.warning(f"⚠️ Could not apply fix: {description}")
+            logger.warning(f"[WARN] Could not apply fix: {description}")
             # Move to next item or stop
             break
 
@@ -375,7 +380,7 @@ def main():
     status.save()
 
     logger.info(f"\n{'='*80}")
-    logger.info(f"🏁 Meta-Loop completed after {iteration + 1} iterations")
+    logger.info(f"Meta-Loop completed after {iteration + 1} iterations")
     logger.info(f"   Fixes applied: {status.data['fixes_applied']}")
     logger.info(f"   Tests run: {status.data['tests_run']}")
     logger.info(f"   Git commits: {status.data['git_commits']}")
@@ -386,8 +391,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        logger.info("\n⚠️ Meta-loop interrupted by user")
+        logger.info("\nMeta-loop interrupted by user")
         sys.exit(0)
     except Exception as e:
-        logger.exception(f"❌ Fatal error in meta-loop: {e}")
+        logger.exception(f"Fatal error in meta-loop: {e}")
         sys.exit(1)

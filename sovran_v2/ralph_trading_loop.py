@@ -203,7 +203,7 @@ def run_live_session(cycles: int = 720, interval: int = 5) -> Tuple[bool, Dict]:
         )
 
         if result.returncode == 0:
-            logger.info("✅ Live session completed successfully")
+            logger.info("[OK] Live session completed successfully")
 
             # Parse output for summary info
             # (In real implementation, would read from session result file)
@@ -215,14 +215,14 @@ def run_live_session(cycles: int = 720, interval: int = 5) -> Tuple[bool, Dict]:
 
             return True, summary
         else:
-            logger.error(f"❌ Live session failed:\n{result.stdout}\n{result.stderr}")
+            logger.error(f"[ERROR] Live session failed:\n{result.stdout}\n{result.stderr}")
             return False, {}
 
     except subprocess.TimeoutExpired:
-        logger.error("❌ Live session timed out")
+        logger.error("[ERROR] Live session timed out")
         return False, {}
     except Exception as e:
-        logger.error(f"❌ Live session error: {e}")
+        logger.error(f"[ERROR] Live session error: {e}")
         return False, {}
 
 
@@ -265,11 +265,11 @@ def git_commit_session_results(session_num: int, pnl: float) -> bool:
         # Push
         subprocess.run(["git", "push", "origin", "HEAD"], check=True)
 
-        logger.info("✅ Git commit successful")
+        logger.info("[OK] Git commit successful")
         return True
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Git operation failed: {e}")
+        logger.error(f"[ERROR] Git operation failed: {e}")
         return False
 
 
@@ -282,7 +282,7 @@ def main():
     parser.add_argument("--interval", type=int, default=5, help="Seconds between cycles (default 5)")
     args = parser.parse_args()
 
-    logger.info(f"🔄 Ralph Wiggum TRADING-LOOP starting")
+    logger.info(f"[LOOP] Ralph Wiggum TRADING-LOOP starting")
     logger.info(f"   Max sessions: {'unlimited' if args.continuous else args.max_sessions}")
     logger.info(f"   Daily loss limit: ${args.max_loss}")
 
@@ -305,7 +305,7 @@ def main():
 
         # Check if daily loss limit hit
         if status.check_daily_loss_limit():
-            logger.warning(f"⚠️ Daily loss limit hit (${status.data['pnl_today']:.2f}). Stopping for today.")
+            logger.warning(f"[WARN] Daily loss limit hit (${status.data['pnl_today']:.2f}). Stopping for today.")
             break
 
         # Check if market hours
@@ -322,7 +322,7 @@ def main():
         )
 
         if not success:
-            logger.error("❌ Session failed - pausing before retry")
+            logger.error("[ERROR] Session failed - pausing before retry")
             time.sleep(300)  # 5 min pause
             continue
 
@@ -342,7 +342,7 @@ def main():
         logger.info(f"   Capture Ratio: {performance.get('avg_capture_ratio', 0) * 100:.1f}%")
 
         if performance.get("needs_improvement"):
-            logger.warning(f"⚠️ Performance below target. Suggestions: {performance.get('suggested_adjustments')}")
+            logger.warning(f"[WARN] Performance below target. Suggestions: {performance.get('suggested_adjustments')}")
 
         # PHASE 3: Update Obsidian
         logger.info("PHASE 3: Updating Obsidian daily log...")
@@ -364,7 +364,7 @@ def main():
     status.save()
 
     logger.info(f"\n{'='*80}")
-    logger.info(f"🏁 Trading-Loop completed after {session_count} sessions")
+    logger.info(f"[DONE] Trading-Loop completed after {session_count} sessions")
     logger.info(f"   Sessions today: {status.data['sessions_today']}")
     logger.info(f"   Total P&L today: ${status.data['pnl_today']:.2f}")
     logger.info(f"   Current balance: ${status.data['current_balance']:.2f}")
@@ -376,8 +376,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        logger.info("\n⚠️ Trading-loop interrupted by user")
+        logger.info("\n[WARN] Trading-loop interrupted by user")
         sys.exit(0)
     except Exception as e:
-        logger.exception(f"❌ Fatal error in trading-loop: {e}")
+        logger.exception(f"[ERROR] Fatal error in trading-loop: {e}")
         sys.exit(1)
