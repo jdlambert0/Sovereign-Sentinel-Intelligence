@@ -194,6 +194,39 @@ class ProbabilityCalculator:
         return (win_rate * avg_win) - (loss_rate * avg_loss)
 
     @staticmethod
+    def risk_of_ruin(win_rate: float, avg_win: float, avg_loss: float, account_balance: float) -> float:
+        """
+        Calculate Risk of Ruin using Mason Malmuth formula.
+
+        RoR = exp(-2μB/σ²)
+        where:
+        - μ = expected value per trade
+        - B = account balance
+        - σ² = variance per trade
+
+        Target: < 1% (professional standard)
+        Alert threshold: > 1% requires position size reduction
+        """
+        if avg_loss == 0 or win_rate >= 1.0 or win_rate <= 0:
+            return 0.0
+
+        # Expected value per trade (μ)
+        ev = TradingMemory.expected_value(win_rate, avg_win, avg_loss)
+
+        # Variance per trade (σ²)
+        loss_rate = 1 - win_rate
+        variance = (win_rate * (avg_win ** 2)) + (loss_rate * (avg_loss ** 2)) - (ev ** 2)
+
+        if variance <= 0:
+            return 0.0
+
+        # Mason Malmuth formula
+        import math
+        ror = math.exp((-2 * ev * account_balance) / variance)
+
+        return max(0.0, min(1.0, ror))
+
+    @staticmethod
     def mean_reversion_probability(z_score: float) -> float:
         """
         Calculate mean reversion probability based on Z-score.
@@ -427,17 +460,77 @@ def respond_to_request(request_path: Path, engine: AIDecisionEngine):
         logger.error(f"Error processing request: {e}", exc_info=True)
 
 
+def check_risk_of_ruin(engine: AIDecisionEngine) -> Tuple[float, str]:
+    """
+    Check current Risk of Ruin and return alert status.
+
+    Returns:
+        (ror_percentage, alert_message)
+    """
+    total_trades = engine.memory.data.get("trades_executed", 0)
+    if total_trades < 10:
+        return 0.0, ""  # Need minimum sample size
+
+    # Calculate win rate and avg win/loss
+    wins = 0
+    losses = 0
+    total_win_amount = 0.0
+    total_loss_amount = 0.0
+
+    for contract_data in engine.memory.data.get("performance_by_contract", {}).values():
+        wins += contract_data.get("wins", 0)
+        # Approximate losses from total trades - wins
+        total_pnl = contract_data.get("total_pnl", 0.0)
+
+    # Use strategy data for more accurate numbers
+    for strat_data in engine.memory.data.get("strategies_tested", {}).values():
+        wins += strat_data.get("wins", 0)
+
+    if total_trades == 0:
+        return 0.0, ""
+
+    win_rate = wins / total_trades
+    total_pnl = engine.memory.data.get("total_pnl", 0.0)
+
+    # Estimate avg win/loss from total P&L
+    if wins > 0:
+        avg_win = max(10.0, abs(total_pnl) / wins) if total_pnl > 0 else 10.0
+    else:
+        avg_win = 10.0
+
+    if losses > 0:
+        avg_loss = max(10.0, abs(total_pnl) / losses) if total_pnl < 0 else 10.0
+    else:
+        avg_loss = 10.0
+
+    # Calculate Risk of Ruin
+    account_balance = 148000  # Current balance estimate
+    ror = TradingMemory.risk_of_ruin(win_rate, avg_win, avg_loss, account_balance)
+
+    # Alert if RoR > 1%
+    if ror > 0.01:
+        alert = f"[ALERT] Risk of Ruin = {ror*100:.2f}% (> 1% threshold) - REDUCE POSITION SIZES"
+        return ror * 100, alert
+    elif ror > 0.005:
+        alert = f"[WARN] Risk of Ruin = {ror*100:.2f}% (approaching 1%) - Monitor closely"
+        return ror * 100, alert
+    else:
+        return ror * 100, ""
+
+
 def main():
     logger.info("=" * 60)
     logger.info("AI DECISION ENGINE - Beyond Edges")
     logger.info("=" * 60)
     logger.info("Philosophy: YOU (AI) are the edge")
     logger.info("Strategy: Trade actively, learn continuously")
+    logger.info("Risk Management: Kelly Criterion + Risk of Ruin < 1%")
     logger.info(f"Watching: {IPC_DIR}")
     logger.info("Press Ctrl+C to stop")
     logger.info("")
 
     engine = AIDecisionEngine()
+    ror_check_counter = 0
 
     try:
         while True:
@@ -447,11 +540,21 @@ def main():
             for request_path in request_files:
                 respond_to_request(request_path, engine)
 
+            # Check Risk of Ruin every 10 cycles (~3 seconds)
+            ror_check_counter += 1
+            if ror_check_counter >= 10:
+                ror_pct, alert = check_risk_of_ruin(engine)
+                if alert:
+                    logger.warning(alert)
+                ror_check_counter = 0
+
             time.sleep(0.3)  # 300ms poll interval
 
     except KeyboardInterrupt:
         logger.info("\nStopping AI Decision Engine")
         logger.info(f"Total trades executed: {engine.memory.data['trades_executed']}")
+        ror_pct, _ = check_risk_of_ruin(engine)
+        logger.info(f"Final Risk of Ruin: {ror_pct:.3f}%")
 
 
 if __name__ == "__main__":

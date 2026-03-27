@@ -39,7 +39,8 @@ def save_memory(data: Dict):
         json.dump(data, f, indent=2)
 
 
-def record_outcome(contract: str, strategy: str, regime: str, pnl: float, hold_time: float):
+def record_outcome(contract: str, strategy: str, regime: str, pnl: float, hold_time: float,
+                  mfe: float = 0.0, mae: float = 0.0):
     """
     Record trade outcome to memory.
 
@@ -48,6 +49,8 @@ def record_outcome(contract: str, strategy: str, regime: str, pnl: float, hold_t
         strategy: Strategy used ("momentum" or "mean_reversion")
         regime: Market regime ("trending_up", "trending_down", "choppy", etc.)
         pnl: Profit/loss in dollars
+        mfe: Maximum Favorable Excursion (best profit during trade)
+        mae: Maximum Adverse Excursion (worst loss during trade)
         hold_time: Hold time in seconds
     """
     memory = load_memory()
@@ -78,6 +81,24 @@ def record_outcome(contract: str, strategy: str, regime: str, pnl: float, hold_t
     elif pnl < 0:
         memory["performance_by_contract"][contract]["losses"] += 1
 
+    # Track MFE/MAE for diagnostics
+    if "mfe_mae_data" not in memory:
+        memory["mfe_mae_data"] = []
+    memory["mfe_mae_data"].append({
+        "contract": contract,
+        "strategy": strategy,
+        "regime": regime,
+        "pnl": pnl,
+        "mfe": mfe,
+        "mae": mae,
+        "hold_time": hold_time,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "is_win": is_win
+    })
+    # Keep last 100 trades for analysis
+    if len(memory["mfe_mae_data"]) > 100:
+        memory["mfe_mae_data"] = memory["mfe_mae_data"][-100:]
+
     # Update strategy performance
     memory["strategies_tested"][strategy]["total_pnl"] += pnl
     if is_win:
@@ -104,15 +125,17 @@ def record_outcome(contract: str, strategy: str, regime: str, pnl: float, hold_t
 
 
 if __name__ == "__main__":
-    # Can be called from command line: python record_trade_outcome.py MNQ momentum trending_up 10.5 180
+    # Can be called from command line: python record_trade_outcome.py MNQ momentum trending_up 10.5 180 [mfe] [mae]
     if len(sys.argv) >= 6:
         contract = sys.argv[1]
         strategy = sys.argv[2]
         regime = sys.argv[3]
         pnl = float(sys.argv[4])
         hold_time = float(sys.argv[5])
-        record_outcome(contract, strategy, regime, pnl, hold_time)
+        mfe = float(sys.argv[6]) if len(sys.argv) > 6 else 0.0
+        mae = float(sys.argv[7]) if len(sys.argv) > 7 else 0.0
+        record_outcome(contract, strategy, regime, pnl, hold_time, mfe, mae)
     else:
-        print("Usage: python record_trade_outcome.py <contract> <strategy> <regime> <pnl> <hold_time>")
-        print("Example: python record_trade_outcome.py MNQ momentum trending_up 10.5 180")
+        print("Usage: python record_trade_outcome.py <contract> <strategy> <regime> <pnl> <hold_time> [mfe] [mae]")
+        print("Example: python record_trade_outcome.py MNQ momentum trending_up 10.5 180 15.2 -8.3")
         sys.exit(1)

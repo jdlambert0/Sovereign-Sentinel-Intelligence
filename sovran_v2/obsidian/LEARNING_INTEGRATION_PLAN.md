@@ -41,28 +41,29 @@ status: in-progress
 
 ### Quick Wins (Today - March 27):
 
-**1. Kelly Criterion Position Sizing** ⏳
+**1. Kelly Criterion Position Sizing** ✅
 - **What:** Optimal bet sizing based on edge
 - **Formula:** `f* = (bp - q) / b` with 0.25 fractional Kelly
 - **Impact:** Prevent overbetting, maximize long-term growth
-- **Implementation:** Add to `ai_decision_engine.py`
-- **Time:** 10 minutes
+- **Implementation:** Added to `ai_decision_engine.py` lines 159-184
+- **Status:** COMPLETE - Already integrated
 - **Code Location:** `_research/gambling_bookkeeping/GAMBLING_STRATEGIES_FOR_TRADING.md` lines 100-150
 
-**2. Risk of Ruin Monitoring** ⏳
-- **What:** Calculate bankruptcy probability daily
+**2. Risk of Ruin Monitoring** ✅
+- **What:** Calculate bankruptcy probability continuously
 - **Formula:** Mason Malmuth `RoR = exp(-2μB/σ²)`
 - **Target:** < 1% (professional standard)
-- **Implementation:** Add to memory system
-- **Time:** 10 minutes
-- **Alert:** Reduce size if RoR > 1%
+- **Implementation:** Added to `ai_decision_engine.py` lines 186-224, monitored in main loop
+- **Status:** COMPLETE - Alerts if RoR > 0.5%, warning if > 1%
+- **Alert:** Reduces size if RoR > 1%
 
-**3. Enhanced Outcome Tracking** ⏳
+**3. Enhanced Outcome Tracking** ✅
 - **What:** Add MFE/MAE to outcome recorder
 - **Why:** Diagnose entry vs exit problems
-- **Implementation:** Enhance `record_trade_outcome.py`
-- **Time:** 10 minutes
-- **Data:** Track max favorable/adverse excursion
+- **Implementation:** Enhanced `record_trade_outcome.py` with MFE/MAE params
+- **Status:** COMPLETE - Tracks last 100 trades with full diagnostics
+- **Data:** Tracks max favorable/adverse excursion per trade
+- **Tool:** Created `mfe_mae_diagnostics.py` for automated analysis
 
 ### Medium Wins (This Week):
 
@@ -213,11 +214,11 @@ status: in-progress
 ## Implementation Checklist
 
 ### Week 1 (Current):
-- [ ] Kelly Criterion integrated
-- [ ] Risk of Ruin monitoring active
-- [ ] Enhanced outcome tracking (MFE/MAE)
+- [x] Kelly Criterion integrated (ai_decision_engine.py lines 159-184)
+- [x] Risk of Ruin monitoring active (ai_decision_engine.py lines 186-224, main loop)
+- [x] Enhanced outcome tracking (MFE/MAE) (record_trade_outcome.py + mfe_mae_diagnostics.py)
 - [ ] Trade journal automated
-- [ ] Ferguson rules enforced
+- [ ] Ferguson rules enforced (MAX 5% per position, 2% daily - needs validation)
 - [ ] Attribution analysis running
 
 ### Week 2:
