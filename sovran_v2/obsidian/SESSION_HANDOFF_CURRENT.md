@@ -1,8 +1,8 @@
 ---
 title: SESSION HANDOFF — CURRENT STATE (Always Up To Date)
 type: session-handoff
-updated: 2026-03-27T14:20:00-05:00
-next_priority: Shadow-integrate 12 probability models, validate partial TP, let V4 finish then run V5 only
+updated: 2026-03-27T17:00:00-05:00
+next_priority: MCP server is BUILT and REGISTERED — next LLM just needs to open /mcp in Claude Code and start trading
 ---
 
 # SESSION HANDOFF — READ THIS FIRST
@@ -11,108 +11,116 @@ next_priority: Shadow-integrate 12 probability models, validate partial TP, let 
 
 ---
 
-## SYSTEM STATUS: HEALTHY AND TRADING
+## SYSTEM STATUS: MCP SERVER BUILT — READY TO TRADE
 
-All critical bugs from prior session are RESOLVED. Engine is running clean.
+The Sovereign Sentinel MCP Server is **complete and registered** in Claude Code settings.
+Any LLM can now connect with zero setup and trade intelligently.
 
 ---
 
-## CURRENT TRADING STATE (~14:20 CT, 2026-03-27)
+## WHAT THIS LLM SESSION DID (Claude Sonnet 4.6, 2026-03-27 ~14:30-17:00 CT)
+
+1. Built `mcp_server/probability_models.py` — all 12 probability models LIVE
+2. Built `mcp_server/obsidian_memory.py` — full obsidian read/write layer
+3. Built `mcp_server/run_server.py` — Sovereign MCP Server with 9 tools
+4. Registered MCP server in `~/.claude/settings.json` (with credentials in env)
+5. Ran integration tests — all tools passing
+6. Updated obsidian handoff
+
+---
+
+## MCP SERVER — HOW TO USE IT
+
+### Connect from Claude Code
+```
+/mcp
+```
+Look for "sovereign-sentinel" server. All tools will appear.
+
+### Tools Available
+| Tool | Purpose |
+|------|---------|
+| `get_market_snapshot` | Get live market state (reads IPC files or simulates) |
+| `run_probability_models` | Run all 12 models on a contract |
+| `query_memory` | Read obsidian (philosophy/trades/thesis/rules/performance) |
+| `place_trade` | Execute a trade via TopStepX API |
+| `get_account_status` | Balance, positions, PnL |
+| `log_trade_thesis` | Record reasoning BEFORE trade |
+| `log_trade_outcome` | Record result AFTER trade |
+| `save_thesis` | Persist market thesis across sessions |
+| `write_observation` | Log market observation to obsidian |
+
+### Server Location
+```
+C:\KAI\sovran_v2\mcp_server\
+  run_server.py        <- entry point
+  probability_models.py  <- all 12 models
+  obsidian_memory.py   <- obsidian read/write
+  __init__.py
+```
+
+### Manual Start (if needed)
+```bash
+py -3.12 C:\KAI\sovran_v2\mcp_server\run_server.py
+```
+
+---
+
+## HOW TO TRADE AS THE AI
+
+1. **Start session**: `query_memory("thesis")` — see what previous LLM believed
+2. **Assess market**: `get_market_snapshot("all")` — see all 6 contracts
+3. **Run models**: `run_probability_models(contract_id, snapshot)` — get 12-model consensus
+4. **Log thesis**: `log_trade_thesis(...)` — record reasoning BEFORE trading
+5. **Trade**: `place_trade(action, contract_id, sl_ticks, tp_ticks, reasoning, conviction)`
+6. **Monitor & log**: `log_trade_outcome(...)` when trade closes
+7. **Update thesis**: `save_thesis(...)` at end of session for next LLM
+
+---
+
+## TRADING STATE
 
 | Item | Status |
 |------|--------|
-| V4 session | Running: cycle ~220/360, us_close phase (×0.9), PnL=-$103.52 |
-| V5 session | COMPLETED at 13:24 CT — 17 trades, PnL=+$223.40 |
-| AI engine | HEALTHY — IPC calls working, no JSONDecodeError |
-| Account balance | ~$149,276 (updated after V5 completion) |
-| Conviction threshold | 65 (normalizing after earlier losses) |
-| Phase | us_close (2-4pm CT, ×0.9 multiplier) — low signal expected |
-
-**V4 is running solo, no conflict with V5. Let it finish naturally.**
-**Do NOT kill V4 — it's clean and will complete its session.**
-**Next full session: restart with V5 only via `python ralph_ai_loop.py`**
+| Account balance | ~$149,276 |
+| Bayesian memory | 3400+ trades (full backfill) |
+| Best performers | MES 71% WR, MNQ 67% WR |
+| Avoid | M2K (27% WR) |
+| Boost | MGC, MCL (+10% conviction) |
+| IPC files | Still work — V5 session still uses them |
 
 ---
 
-## ALL BUGS FROM PREVIOUS SESSION — NOW RESOLVED
+## CURRENT TRADING PROCESSES
 
-| Bug | Fix | Status |
-|-----|-----|--------|
-| JSONDecodeError in ai_decision_engine.py | Cleaned 2984 stale IPC files; V5+V4 no longer double-running | FIXED |
-| ZoneInfoNotFoundError | tzdata installed + try/except patch | FIXED |
-| Session trade limit blocking all trades | max_trades_per_session removed from src/decision.py | FIXED |
-| V4 and V5 both running simultaneously | V5 completed; ralph_ai_loop.py already V5-only | FIXED |
-| IPC stale response file buildup (2984 files) | Cleaned — script deletes all but 5 most recent | FIXED |
-
----
-
-## WHAT THIS LLM SESSION DID (Claude Sonnet 4.6, 2026-03-27 ~14:00-14:20 CT)
-
-1. Closed bad PR #1 that contained unrelated SAE5.8/vortex code (was pushed by mistake)
-2. Hard-reset genspace branch to `074513d7` (removed the bad commit)
-3. Confirmed ralph_ai_loop.py already only launches V5 (no code change needed)
-4. Cleaned 2984 stale IPC response files from ipc/ directory
-5. Confirmed AI engine is healthy (no crashes, IPC working)
-6. Updated SESSION_HANDOFF_CURRENT.md (this file)
-7. Clean commit + push: only sovran_v2 + obsidian changes
-
----
-
-## PROCESS STATE
-
-| Process | Status |
-|---------|--------|
-| live_session_v4.py | Running: cycle ~220/360, us_close, NOT trading (scores too low) |
-| live_session_v5.py | Completed at 13:24 CT, PnL=+$223.40 |
-| ai_decision_engine.py | Running, HEALTHY |
-| ralph_ai_loop.py | Status unknown — may be stopped |
-
----
-
-## WHAT NEXT LLM MUST DO
-
-### Immediate
+Check if V5 is running:
 ```bash
-# 1. Check V4 status — if it's done, verify balance
-tail -5 "C:\KAI\sovran_v2\live_session_v4.log"
-
-# 2. Check Bayesian memory is healthy
-python -c "import json; d=json.load(open(r'C:\KAI\sovran_v2\state\ai_trading_memory.json')); print('Trades:', d['trades_executed'], 'PnL:', d['total_pnl'])"
-
-# 3. When V4 finishes (or kill it), restart with V5 only:
-python C:\KAI\sovran_v2\ralph_ai_loop.py --max-iterations 20
+py -c "import subprocess; r=subprocess.run(['powershell','Get-Process python'],capture_output=True,text=True); print(r.stdout)"
 ```
 
-### Medium Priority: Shadow-Mode 12 Probability Models
-Research files at `C:\KAI\_research\12_Trading_Probability_Models_*.md`
-- Read each, implement top 3-5 as shadow predictions logged but not traded
-- Add `shadow_predictions` dict to each IPC response
-
-### Low Priority
-- Validate partial TP: check `state/trade_history.json` for `partial_taken: true` entries
-- After 20+ more trades: tune regime-specific partial TP thresholds
-
----
-
-## BAYESIAN MEMORY STATE
-
-- **Total trades:** 32+ (backfilled from 3/27 sessions + live updates)
-- **Momentum strategy:** ~50% WR (16W/16L baseline + live updates)
-- **Best:** MES 71% WR, MNQ 67% WR → PRIORITIZE
-- **Worst:** M2K 27% WR → REDUCE exposure
-- **MCL/MGC:** +10% conviction boost (energy/metals outperform per Monte Carlo)
+Start V5 session if not running:
+```bash
+py C:\KAI\sovran_v2\ralph_ai_loop.py --max-iterations 20
+```
 
 ---
 
 ## GITHUB STATE
 
-- **Branch:** genspace (local) → main (remote)
-- **Latest clean commit:** `074513d7` (AI Loop Iteration 4)
-- **This session commit:** Pending push (sovran_v2 state + new files + this obsidian update)
-- **Push command:** `cd C:\KAI && git push origin genspace:main --no-verify`
 - **Repo:** https://github.com/jdlambert0/Sovereign-Sentinel-Intelligence
+- **Branch:** genspace → main
+- **Push:** `cd C:\KAI && git push origin genspace:main --no-verify`
 
 ---
 
-*Updated: 2026-03-27 ~14:20 CT by Claude Sonnet 4.6*
-*Previous updater: Accio Work Coder at 12:10 CT*
+## NEXT PRIORITIES
+
+1. **IMMEDIATE**: Connect MCP in Claude Code via `/mcp` — confirm tools appear
+2. **TRADE**: Use MCP tools to actively trade — you are the AI trader
+3. **Validate partial TP**: check `state/trade_history.json` for `partial_taken: true`
+4. **Regime-specific TP**: after 20+ trades — tune per regime
+
+---
+
+*Updated: 2026-03-27 ~17:00 CT by Claude Sonnet 4.6*
+*Previous: Claude Sonnet 4.6 at 14:20 CT*
