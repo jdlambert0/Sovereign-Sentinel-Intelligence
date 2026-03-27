@@ -1,0 +1,59 @@
+{
+  "status": "complete",
+  "duration_seconds": 0.03402996063232422,
+  "messages_received": 197573,
+  "trades": [
+    {
+      "contract": "CON.F.US.MCLE.K26",
+      "side": "LONG",
+      "entry": 93.84,
+      "exit": 93.62959999999993,
+      "pnl": -21.04000000000815,
+      "ticks": -21.04000000000815,
+      "hold_time": 70.46373581886292,
+      "exit_reason": "STOP_HIT",
+      "mfe": 14.999999999999147,
+      "mae": -6.000000000000227
+    },
+    {
+      "contract": "CON.F.US.MES.M26",
+      "side": "LONG",
+      "entry": 6599.25,
+      "exit": 6591.747999999998,
+      "pnl": -37.51000000000931,
+      "ticks": -30.00800000000745,
+      "hold_time": 654.7759976387024,
+      "exit_reason": "STOP_HIT",
+      "mfe": 4.0,
+      "mae": -23.0
+    },
+    {
+      "contract": "CON.F.US.M2K.M26",
+      "side": "SHORT",
+      "entry": 2531.1,
+      "exit": 2534.2479999999982,
+      "pnl": -15.739999999990687,
+      "ticks": -31.479999999981374,
+      "hold_time": 689.5999958515167,
+      "exit_reason": "STOP_HIT",
+      "mfe": 10.99999999999909,
+      "mae": -25.99999999999909
+    },
+    {
+      "contract": "CON.F.US.M2K.M26",
+      "side": "LONG",
+      "entry": 2533.9,
+      "exit": 2530.652000000002,
+      "pnl": -16.239999999990687,
+      "ticks": -32.47999999998137,
+      "hold_time": 125.91270613670349,
+      "exit_reason": "STOP_HIT",
+      "mfe": 11.999999999998181,
+      "mae": -28.00000000000182
+    }
+  ],
+  "session_pnl": -90.52999999999884,
+  "start_balance": 148624.57,
+  "end_balance": 148533.67,
+  "consecutive_losses": 1
+}

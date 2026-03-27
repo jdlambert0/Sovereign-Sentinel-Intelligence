@@ -1,0 +1,13 @@
+{
+  "auth": null,
+  "account": null,
+  "positions": null,
+  "market_data": {},
+  "scans": [],
+  "trades_attempted": 0,
+  "trades_executed": 0,
+  "pnl": 0.0,
+  "errors": [
+    "Login failed: Unknown error"
+  ]
+}
