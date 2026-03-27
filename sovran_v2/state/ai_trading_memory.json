@@ -1,15 +1,15 @@
 {
-  "trades_executed": 2929,
+  "trades_executed": 4003,
   "total_pnl": 337.42999999999984,
   "strategies_tested": {
     "momentum": {
-      "trades": 960,
+      "trades": 1236,
       "wins": 16,
       "total_pnl": 337.42999999999984,
       "avg_hold_time": 110.46315443080408
     },
     "mean_reversion": {
-      "trades": 1969,
+      "trades": 2767,
       "wins": 0,
       "total_pnl": 0.0,
       "avg_hold_time": 0.0
@@ -18,19 +18,19 @@
   "market_patterns": {},
   "performance_by_contract": {
     "CON.F.US.MYM.M26": {
-      "trades": 560,
+      "trades": 878,
       "wins": 1,
       "losses": 1,
       "total_pnl": 50.040000000000006
     },
     "CON.F.US.MNQ.M26": {
-      "trades": 866,
+      "trades": 1183,
       "wins": 4,
       "losses": 2,
       "total_pnl": 318.66999999999996
     },
     "CON.F.US.M2K.M26": {
-      "trades": 729,
+      "trades": 919,
       "wins": 3,
       "losses": 8,
       "total_pnl": -115.07999999999998
@@ -48,7 +48,7 @@
       "total_pnl": 0.0
     },
     "CON.F.US.MES.M26": {
-      "trades": 769,
+      "trades": 1018,
       "wins": 5,
       "losses": 2,
       "total_pnl": 112.55999999999997
@@ -63,17 +63,17 @@
   "performance_by_time": {},
   "performance_by_regime": {
     "trending_down": {
-      "trades": 886,
+      "trades": 1155,
       "wins": 0,
       "total_pnl": 0.0
     },
     "choppy": {
-      "trades": 1969,
+      "trades": 2767,
       "wins": 0,
       "total_pnl": 0.0
     },
     "trending_up": {
-      "trades": 74,
+      "trades": 81,
       "wins": 0,
       "total_pnl": 0.0
     },
@@ -84,7 +84,7 @@
     }
   },
   "lessons_learned": [],
-  "last_update": "2026-03-27T19:15:15.181116+00:00",
+  "last_update": "2026-03-27T20:33:33.931529+00:00",
   "mfe_mae_data": [
     {
       "contract": "CON.F.US.MCL.M26",
