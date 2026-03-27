@@ -284,6 +284,31 @@ async def list_tools() -> List[types.Tool]:
                 },
                 "required": ["observation"]
             }
+        ),
+        types.Tool(
+            name="hunt_and_trade",
+            description=(
+                "ONE-CALL autonomous trade hunt. Scans all 6 contracts, runs all 12 probability "
+                "models, places the best trade if conviction >= threshold. Handles TopStepX single-"
+                "connection constraint automatically (stops any running session first). "
+                "Returns full decision with reasoning. Use this instead of calling get_market_snapshot + "
+                "run_probability_models + place_trade separately."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "conviction_threshold": {
+                        "type": "integer",
+                        "description": "Minimum conviction (0-100) to place a trade. Default: 65.",
+                        "default": 65
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "description": "If true, run all analysis but do NOT place any trade. Useful for checking current setup.",
+                        "default": False
+                    }
+                }
+            }
         )
     ]
 
@@ -355,6 +380,9 @@ async def _dispatch_tool(name: str, args: Dict[str, Any]) -> Any:
 
     elif name == "write_observation":
         return write_observation(args["observation"], args.get("category", "market"))
+
+    elif name == "hunt_and_trade":
+        return await _hunt_and_trade(args)
 
     else:
         return {"error": f"Unknown tool: {name}"}
@@ -504,6 +532,194 @@ async def _place_trade(args: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Trade placement failed: {e}")
         return {"status": "FAILED", "error": str(e),
                 "action": action, "contract_id": contract_id}
+
+
+async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Full autonomous trade cycle in a single call.
+    - Handles TopStepX single-connection constraint (stops running session if needed)
+    - Scans all contracts, runs all 12 models, places best trade
+    - Returns complete decision audit trail
+    """
+    import subprocess, time as time_mod
+
+    conviction_threshold = args.get("conviction_threshold", 65)
+    dry_run = args.get("dry_run", False)
+
+    # ── Step 1: Connection conflict detection ───────────────────────────────
+    session_mode = "direct"
+    pid_file = SOVRAN_DIR / "trading.pid"
+    stop_signal_path = SOVRAN_DIR / "stop_signal.txt"
+
+    # Check for fresh IPC files (session is actively running)
+    fresh_ipc = False
+    request_files = sorted(IPC_DIR.glob("request_*.json"), key=lambda p: p.stat().st_mtime)
+    if request_files:
+        age = time_mod.time() - request_files[-1].stat().st_mtime
+        fresh_ipc = age < 120  # < 2 minutes old
+
+    if fresh_ipc and pid_file.exists():
+        if dry_run:
+            session_mode = "ipc_read_only"  # dry run: just read, don't conflict
+        else:
+            # Stop the running session so we can take the connection
+            try:
+                pid = int(pid_file.read_text().strip())
+                stop_signal_path.write_text("STOP")
+                subprocess.run(["taskkill", "/PID", str(pid), "/F"],
+                               capture_output=True, timeout=5)
+                time_mod.sleep(2)
+                session_mode = "direct_took_over"
+                logger.info(f"Stopped running session (PID {pid}) to take connection")
+            except Exception as e:
+                session_mode = "ipc_fallback"
+                logger.warning(f"Could not stop session: {e} — using IPC snapshot only")
+    elif not fresh_ipc and not pid_file.exists():
+        session_mode = "direct_cold"
+
+    # ── Step 2: Get market snapshot for all contracts ───────────────────────
+    snapshots_result = await _get_market_snapshot("all")
+    contract_snaps = snapshots_result.get("contracts", []) if isinstance(snapshots_result, dict) else []
+
+    if not contract_snaps:
+        return {
+            "action": "NO_TRADE",
+            "reason": "No market data available (market closed or no IPC files)",
+            "session_mode": session_mode,
+            "hint": "Market must be open and live_session_v5.py running to get live data"
+        }
+
+    # ── Step 3: Run all 12 models on each contract ──────────────────────────
+    memory = _load_memory()
+    best = {"conviction": 0, "contract_id": None, "signal": "NEUTRAL", "snap": {}, "models": {}}
+    all_results = []
+
+    for snap in contract_snaps:
+        if not snap.get("price") or snap.get("price", 0) <= 0:
+            continue
+        try:
+            result = run_all_models(snap, memory)
+            summary = result.get("summary", {})
+            conv = summary.get("consensus_strength", 0)
+            signal = summary.get("dominant_signal", "NEUTRAL")
+            ofi_z = snap.get("ofi_z", 0)
+            vpin = snap.get("vpin", 0)
+
+            all_results.append({
+                "contract": snap.get("contract_id"),
+                "name": snap.get("name", snap.get("contract_id", "")),
+                "price": snap.get("price"),
+                "conviction": conv,
+                "signal": signal,
+                "ofi_z": round(ofi_z, 3),
+                "vpin": round(vpin, 3),
+                "data_age_secs": snap.get("_age_seconds", 999)
+            })
+
+            if conv > best["conviction"]:
+                best = {
+                    "conviction": conv,
+                    "contract_id": snap.get("contract_id"),
+                    "signal": signal,
+                    "snap": snap,
+                    "models": result,
+                    "ofi_z": ofi_z,
+                    "vpin": vpin
+                }
+        except Exception as e:
+            logger.warning(f"Model run failed for {snap.get('contract_id')}: {e}")
+            continue
+
+    # Sort by conviction descending
+    all_results.sort(key=lambda x: x["conviction"], reverse=True)
+
+    # ── Step 4: Decision ────────────────────────────────────────────────────
+    phase = _current_session_phase()
+
+    if phase == "outside_hours":
+        return {
+            "action": "NO_TRADE",
+            "reason": "Outside market hours (8am-4pm CT)",
+            "phase": phase,
+            "all_scanned": all_results,
+            "best_setup": best.get("contract_id"),
+            "best_conviction": best["conviction"]
+        }
+
+    if best["conviction"] < conviction_threshold:
+        return {
+            "action": "NO_TRADE",
+            "reason": f"Best conviction {best['conviction']} < threshold {conviction_threshold}",
+            "best_setup": best.get("contract_id"),
+            "best_conviction": best["conviction"],
+            "best_signal": best["signal"],
+            "all_scanned": all_results,
+            "session_mode": session_mode,
+            "advice": "Wait for higher conviction setup. Models are uncertain right now."
+        }
+
+    if dry_run:
+        return {
+            "action": "DRY_RUN",
+            "would_trade": best.get("contract_id"),
+            "would_direction": best["signal"],
+            "conviction": best["conviction"],
+            "all_scanned": all_results,
+            "note": "dry_run=True — no trade placed"
+        }
+
+    # ── Step 5: Place the trade ─────────────────────────────────────────────
+    contract = best["contract_id"]
+    signal = best["signal"]
+    snap = best["snap"]
+    atr = snap.get("atr_ticks", 12.0)
+    sl = max(8, round(atr * 0.8))
+    tp = round(sl * 1.8)
+
+    models_summary = best["models"].get("summary", {})
+    reasoning = (
+        f"hunt_and_trade: {signal} conv={best['conviction']} "
+        f"OFI_Z={best['ofi_z']:.2f} VPIN={best['vpin']:.3f} "
+        f"| {models_summary.get('reasoning', '')}"
+    )
+
+    trade_result = await _place_trade({
+        "action": "LONG" if signal == "LONG" else "SHORT",
+        "contract_id": contract,
+        "sl_ticks": sl,
+        "tp_ticks": tp,
+        "contracts": 1,
+        "conviction": best["conviction"],
+        "reasoning": reasoning
+    })
+
+    # Log thesis to obsidian
+    try:
+        log_trade_thesis(
+            contract=contract,
+            action="LONG" if signal == "LONG" else "SHORT",
+            thesis=reasoning,
+            conviction=best["conviction"],
+            models_summary=models_summary,
+            entry_price=snap.get("price", 0),
+            sl_ticks=sl,
+            tp_ticks=tp
+        )
+    except Exception:
+        pass
+
+    return {
+        "action": "LONG" if signal == "LONG" else "SHORT",
+        "contract": contract,
+        "conviction": best["conviction"],
+        "sl_ticks": sl,
+        "tp_ticks": tp,
+        "entry_price": snap.get("price"),
+        "trade_result": trade_result,
+        "all_scanned": all_results,
+        "session_mode": session_mode,
+        "reasoning": reasoning
+    }
 
 
 def _load_memory() -> Dict[str, Any]:
