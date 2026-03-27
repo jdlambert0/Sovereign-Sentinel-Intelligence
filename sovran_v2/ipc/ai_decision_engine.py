@@ -519,8 +519,13 @@ class AIDecisionEngine:
 
         # --- OVERNIGHT LOCKOUT (Kaizen #6) ---
         # Hard block outside 8am-4pm CT. All overnight trades were losses.
-        from zoneinfo import ZoneInfo
-        ct_now = datetime.now(ZoneInfo("America/Chicago"))
+        # Windows may lack tzdata; fall back to UTC-6 offset (CT)
+        try:
+            from zoneinfo import ZoneInfo
+            ct_now = datetime.now(ZoneInfo("America/Chicago"))
+        except Exception:
+            from datetime import timedelta
+            ct_now = datetime.now(timezone.utc) - timedelta(hours=6)
         hour_ct = ct_now.hour
         if hour_ct < 8 or hour_ct >= 16:
             contract_id = snapshot.get('contract_id', 'UNKNOWN')

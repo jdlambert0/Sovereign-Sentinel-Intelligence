@@ -544,11 +544,8 @@ class DecisionEngine:
         if now - self.last_intent_time < self.config.min_seconds_between_trades:
             return None
 
-        # Session trade limit
-        if self._trade_count_session >= self.config.max_trades_per_session:
-            self.logger.info("Session trade limit reached, skipping analysis")
-            return None
-
+        # [REMOVED] Session trade limit guard - circuit breaker + RoR handle this
+        # [REMOVED] Session trade limit guard - circuit breaker + RoR handle this
         recent_trades = recent_trades or []
         performance_summary = performance_summary or {
             "win_rate": 0.50,
@@ -638,7 +635,7 @@ class DecisionEngine:
             return None
 
         self.last_intent_time = now
-        self._trade_count_session += 1
+        # [REMOVED] _trade_count_session += 1
         return intent
 
     def _parse_response(self, raw: Dict[str, Any], snapshot: MarketSnapshot) -> Optional[TradeIntent]:
