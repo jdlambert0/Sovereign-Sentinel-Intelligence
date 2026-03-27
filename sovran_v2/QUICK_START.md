@@ -1,3 +1,11 @@
+## FOR ANY INCOMING LLM — START HERE
+
+Read this file FIRST: obsidian/LLM_HANDOFF_KIT.md
+It contains the complete system briefing, current status, credentials reference,
+architecture, and what to do next. Everything else is supplementary.
+
+---
+
 # Sovran V2 - Quick Start Guide
 
 **Last Updated:** 2026-03-26 by KAI (Claude Sonnet 4.5)

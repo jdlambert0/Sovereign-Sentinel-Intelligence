@@ -67,7 +67,7 @@ class DecisionConfig:
     # Trading thresholds
     min_conviction_to_trade: float = 70.0     # Spec says Guardian blocks < 70
     min_seconds_between_trades: int = 120
-    max_trades_per_session: int = 20
+    max_trades_per_session: int = 50
 
     # Context depth
     recent_trades_in_prompt: int = 10
