@@ -1,0 +1,65 @@
+{
+  "trades_executed": 6,
+  "total_pnl": 0.0,
+  "strategies_tested": {
+    "momentum": {
+      "trades": 5,
+      "wins": 0,
+      "total_pnl": 0.0,
+      "avg_hold_time": 0.0
+    },
+    "mean_reversion": {
+      "trades": 1,
+      "wins": 0,
+      "total_pnl": 0.0,
+      "avg_hold_time": 0.0
+    }
+  },
+  "market_patterns": {},
+  "performance_by_contract": {
+    "CON.F.US.MYM.M26": {
+      "trades": 2,
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0.0
+    },
+    "CON.F.US.MNQ.M26": {
+      "trades": 2,
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0.0
+    },
+    "CON.F.US.M2K.M26": {
+      "trades": 1,
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0.0
+    },
+    "CON.F.US.MCLE.K26": {
+      "trades": 1,
+      "wins": 0,
+      "losses": 0,
+      "total_pnl": 0.0
+    }
+  },
+  "performance_by_time": {},
+  "performance_by_regime": {
+    "trending_down": {
+      "trades": 2,
+      "wins": 0,
+      "total_pnl": 0.0
+    },
+    "choppy": {
+      "trades": 1,
+      "wins": 0,
+      "total_pnl": 0.0
+    },
+    "trending_up": {
+      "trades": 3,
+      "wins": 0,
+      "total_pnl": 0.0
+    }
+  },
+  "lessons_learned": [],
+  "last_update": "2026-03-27T02:25:27.835799+00:00"
+}
