@@ -29,7 +29,9 @@ PYTHON = Path(r"C:\KAI\vortex\.venv312\Scripts\python.exe")
 CRITICAL_FILES = [
     ARMADA_DIR / "sovran_ai.py",
     VORTEX_DIR / "llm_client.py",
-    VORTEX_DIR / "providers" / "openrouter.py",
+    # Providers are now direct, openrouter is legacy
+    VORTEX_DIR / "providers" / "google_gemini.py",
+    VORTEX_DIR / "providers" / "anthropic.py",
 ]
 
 REQUIRED_ENV_KEYS = [
@@ -85,9 +87,10 @@ def gate_imports():
     sys.path.insert(0, str(VORTEX_DIR))
     sys.path.insert(0, str(ARMADA_DIR))
 
-    critical_imports = [
+    critical_imports = [ # March 22 2026: Changed from GeminiProvider to complete (Functional)
         ("llm_client", "complete_ensemble"),
-        ("providers.openrouter", "complete"),
+        ("providers.google_gemini", "complete"),
+        ("providers.anthropic", "complete"),
     ]
     for mod_name, func_name in critical_imports:
         try:
@@ -141,7 +144,7 @@ def gate_tests():
     except subprocess.TimeoutExpired:
         check("Unit Tests", False, "TIMEOUT after 30s")
     except Exception as e:
-        check("Unit Tests", False, str(e)[:80])
+        check("Unit Tests", False, str(e))
 
 
 # ── GATE 4: STRUCTURAL INTEGRITY ──
@@ -178,10 +181,15 @@ def gate_structure():
         ("Data Freshness", "DATA FRESHNESS"),
         ("Silent WS Detection", "SILENT WEBSOCKET"),
         ("Daily PnL Reset", "NEW TRADING DAY"),
-        ("Confidence Gate (0.50)", "confidence < 0.50"),
+        ("Confidence Gate (0.40)", "confidence < 0.40"),
     ]
     for name, marker in safety_gates:
         check(f"Safety Gate: {name}", marker in sovran)
+    
+    # Check for functional trailing stop implementation
+    check("Feature: Trailing Stop BE", "modify_bracket_order" in sovran)
+    check("Feature: Credit-Saver Gate", "Credit-Saver Gate" in sovran)
+    check("Feature: WS_TIMEOUT Recovery", "WS_TIMEOUT" in sovran)
 
 
 # ── GATE 5: ENVIRONMENT ──
@@ -214,7 +222,13 @@ def gate_consistency():
 
     sovran = (ARMADA_DIR / "sovran_ai.py").read_text(encoding="utf-8")
 
-    # Check no hardcoded MNQ in trade execution
+    # Check for June 2026 time-bomb (Dynamic resolution check)
+    if "resolve_contract_id" not in sovran:
+        check("Dynamic Contract Resolution", False, "Missing resolve_contract_id mechanism")
+    else:
+        check("Dynamic Contract Resolution", True)
+
+    # Check for hardcoded MNQ in trade execution
     if 'f"Executing Live Bracket Order -> {direction} {contracts} MNQ"' in sovran:
         check(
             "No hardcoded symbol in trade log",
@@ -225,11 +239,11 @@ def gate_consistency():
         check("No hardcoded symbol in trade log", True)
 
     # Check confidence gate matches prompt
-    if "confidence < 0.3" in sovran:
+    if "confidence < 0.40" not in sovran:
         check(
-            "Confidence gate matches prompt (should be 0.50)",
+            "Confidence gate matches prompt (should be 0.40)",
             False,
-            "Gate is 0.3, prompt says 0.50",
+            "Gate does not match 0.40 mandate",
         )
     else:
         check("Confidence gate matches prompt", True)
