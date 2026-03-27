@@ -329,6 +329,42 @@ class _OpenRouterBackend:
             return json.loads(content)
 
 
+class _AnthropicBackend:
+    """Anthropic Claude direct API backend."""
+
+    def __init__(self, config: "DecisionConfig"):
+        self.model = config.ai_model if not config.ai_model.startswith("anthropic/") else config.ai_model.split("/", 1)[1]
+        self.api_key = os.environ.get("ANTHROPIC_API_KEY", config.ai_api_key)
+        self.timeout = config.ai_timeout_seconds
+        self.endpoint = "https://api.anthropic.com/v1/messages"
+
+    async def call(self, prompt: str) -> Dict[str, Any]:
+        import httpx
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                self.endpoint,
+                headers={
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "max_tokens": 512,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=self.timeout,
+            )
+            resp.raise_for_status()
+            text = resp.json()["content"][0]["text"].strip()
+            # Extract JSON from response (may be wrapped in markdown)
+            if "```" in text:
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            return json.loads(text)
+
+
 class _FileIPCBackend:
     """Option C: File-based IPC for external AI agents.
 
@@ -438,6 +474,8 @@ class DecisionEngine:
             self._backend = _OllamaBackend(self.config)
         elif provider == "openrouter":
             self._backend = _OpenRouterBackend(self.config)
+        elif provider == "anthropic":
+            self._backend = _AnthropicBackend(self.config)
         else:
             self._backend = _FileIPCBackend(self.config)
 

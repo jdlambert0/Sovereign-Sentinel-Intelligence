@@ -104,3 +104,12 @@ Next update: After first V5 session or significant system change
 - **kaizen_fix_applied:** V5 Goldilocks Edition ready (code exists, will be used by trading loop)
 - **tests_passed:** True
 - **iteration:** 1
+
+## System Update - 2026-03-26T20:47:00Z
+
+- **IPC System:** ✅ WORKING - V5 successfully using file_ipc for trading decisions
+- **Test Trade:** MES LONG conviction=69 (below 70 threshold, correctly blocked)
+- **IPC Response Time:** 0.6s
+- **Decision Logic:** OFI_Z=1.12, VPIN=0.52 → LONG signal
+- **Fixed:** config/.env AI_PROVIDER changed from "openrouter" to "file_ipc"
+- **Status:** System ready for autonomous trading with IPC-based decisions

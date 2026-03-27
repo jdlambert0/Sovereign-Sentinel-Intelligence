@@ -310,7 +310,7 @@ def main():
 
         # Check if market hours
         if not is_market_hours():
-            logger.info("⏸️ Outside trading hours (8am-4pm CT). Waiting...")
+            logger.info("[PAUSE] Outside trading hours (8am-4pm CT). Waiting...")
             time.sleep(600)  # Wait 10 min and check again
             continue
 

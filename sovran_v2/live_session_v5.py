@@ -48,6 +48,19 @@ from collections import deque
 sys.path.insert(0, "/tmp/pylibs")
 import httpx
 
+# LLM Decision Engine — replaces rule-based scoring
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src.decision import DecisionEngine, DecisionConfig
+from src.market_data import MarketSnapshot, MarketRegime
+
+# Load .env before anything reads os.environ
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", ".env")
+    load_dotenv(_env_path, override=True)
+except Exception:
+    pass
+
 # ── Config ──────────────────────────────────────────────────────────────
 API_KEY = "9Vlu2G+cyZJ2IKJOIbI8YdEB1tmUOReiHIzlDk36EwE="
 USERNAME = "jessedavidlambert@gmail.com"
@@ -699,6 +712,8 @@ def analyze_market(tick: MarketTick, meta: Dict,
         return result
 
     total_trades = tick.buy_volume + tick.sell_volume
+    result["buy_vol"] = tick.buy_volume
+    result["sell_vol"] = tick.sell_volume
     if total_trades < MIN_FLOW_TRADES:
         result["thesis"] = [f"Too few trades ({total_trades}/{MIN_FLOW_TRADES})"]
         return result
@@ -1126,6 +1141,20 @@ class LiveSessionV4:
         self.consecutive_losses = 0
         self.kaizen = KaizenEngine()  # Phase 3+4
 
+        # LLM Decision Engine — AI makes trade/no-trade/direction calls
+        ai_cfg = DecisionConfig(
+            ai_provider=os.environ.get("AI_PROVIDER", "file_ipc"),
+            ai_model=os.environ.get("AI_MODEL", "anthropic/claude-3-5-sonnet"),
+            ai_api_key=os.environ.get("AI_API_KEY", ""),
+            ai_endpoint=os.environ.get("AI_ENDPOINT", "https://openrouter.ai/api/v1/chat/completions"),
+            ai_timeout_seconds=float(os.environ.get("AI_TIMEOUT_SECONDS", "20")),
+            min_conviction_to_trade=65.0,   # LLM must be >= 65% confident
+            min_seconds_between_trades=60,  # 1 min cooldown between any trades
+        )
+        self.ai = DecisionEngine(ai_cfg)
+        self._ai_loop = asyncio.new_event_loop()
+        logger.info(f"AI Decision Engine: {ai_cfg.ai_provider} / {ai_cfg.ai_model}")
+
     def run(self) -> Dict:
         logger.info("=" * 60)
         logger.info("SOVRAN V5 — GOLDILOCKS EDITION")
@@ -1292,7 +1321,7 @@ class LiveSessionV4:
                     "/api/History/retrieveBars",
                     json={
                         "contractId": cid,
-                        "live": True,
+                        "live": False,  # False = sim/combine account; True = funded live account
                         "startTime": start.isoformat(),
                         "endTime": now.isoformat(),
                         "unit": 2,        # Minute bars
@@ -1349,6 +1378,107 @@ class LiveSessionV4:
             except Exception as e:
                 logger.warning(f"  Bar seed failed for {name}: {e}")
 
+    def _build_snapshot(self, tick: "MarketTick", meta: Dict, ofi_z: float, vpin: float) -> MarketSnapshot:
+        """Convert a MarketTick into a MarketSnapshot for the LLM decision engine."""
+        bars = tick.bars
+        atr = 0.0
+        if len(bars) >= 2:
+            ranges = [abs(b["h"] - b["l"]) for b in bars[-14:]]
+            atr = sum(ranges) / len(ranges) if ranges else 0.0
+
+        if len(bars) >= 2:
+            pct_chg = (tick.last_price - bars[0]["o"]) / bars[0]["o"] * 100 if bars[0]["o"] > 0 else 0.0
+        else:
+            pct_chg = 0.0
+
+        total_vol = tick.buy_volume + tick.sell_volume
+        avg_vol = total_vol / max(len(bars), 1)
+        vol_rate = (tick.buy_volume + tick.sell_volume) / max(avg_vol * len(bars), 1)
+
+        regime_str = detect_regime(list(bars), atr)
+        if regime_str == "trending":
+            mom = (tick.last_price - bars[0]["o"]) / bars[0]["o"] if bars and bars[0]["o"] > 0 else 0
+            regime = MarketRegime.TRENDING_UP if mom > 0 else MarketRegime.TRENDING_DOWN
+        elif regime_str == "ranging":
+            regime = MarketRegime.CHOPPY
+        else:
+            regime = MarketRegime.UNKNOWN
+
+        bid = tick.last_price - (tick.spread_ticks * meta.get("tick_size", 0.25) / 2)
+        ask = tick.last_price + (tick.spread_ticks * meta.get("tick_size", 0.25) / 2)
+
+        bai = (tick.buy_volume - tick.sell_volume) / max(total_vol, 1)
+
+        return MarketSnapshot(
+            timestamp=time.time(),
+            contract_id=tick.contract_id,
+            last_price=tick.last_price,
+            best_bid=bid,
+            best_ask=ask,
+            spread=tick.spread_ticks * meta.get("tick_size", 0.25),
+            atr_points=atr,
+            vpin=vpin,
+            ofi_zscore=ofi_z,
+            volume_rate=vol_rate,
+            bid_ask_imbalance=bai,
+            regime=regime,
+            trend_strength=min(abs(ofi_z) * 15, 100.0),
+            bar_count=len(bars),
+            tick_count=tick.tick_count,
+            high_of_session=tick.high,
+            low_of_session=tick.low if tick.low != float("inf") else tick.last_price,
+            price_change_pct=pct_chg,
+        )
+
+    def _ai_decide(self, snapshot: MarketSnapshot, meta: Dict) -> Optional[Dict]:
+        """Call the LLM synchronously (runs async in a dedicated loop).
+        Returns dict with {signal, conviction, thesis, stop_pts, target_pts} or None.
+        """
+        balance = self.api.get_account_balance() if hasattr(self.api, 'get_account_balance') else self.start_balance
+        daily_pnl = balance - self.start_balance
+
+        async def _call():
+            return await self.ai.analyze(
+                snapshot=snapshot,
+                account_balance=balance,
+                daily_pnl=daily_pnl,
+                distance_to_drawdown=max(0, balance - (self.start_balance * 0.98)),
+                recent_trades=self.trade_history[-10:] if hasattr(self, 'trade_history') else [],
+                performance_summary={
+                    "win_rate": self.kaizen.win_rate if hasattr(self.kaizen, 'win_rate') else 0.5,
+                    "avg_win_loss_ratio": 1.8,
+                    "profit_factor": 0.0,
+                    "total_trades": len(self.trade_history) if hasattr(self, 'trade_history') else 0,
+                },
+                contract_meta=meta,
+            )
+
+        try:
+            intent = self._ai_loop.run_until_complete(_call())
+        except Exception as e:
+            logger.warning(f"AI call failed: {e}")
+            return None
+
+        if intent is None:
+            return None
+
+        from src.risk import TradeSide
+        side_str = "LONG" if intent.side == TradeSide.LONG else "SHORT"
+        tick_size = meta.get("tick_size", 0.25)
+        stop_ticks = max(4, round(intent.suggested_stop_points / tick_size))
+        tp_ticks = max(stop_ticks, round(intent.suggested_target_points / tick_size))
+
+        return {
+            "signal": side_str,
+            "conviction": intent.conviction,
+            "thesis": intent.thesis,
+            "sl_ticks": stop_ticks,
+            "tp_ticks": tp_ticks,
+            "regime": snapshot.regime.value,
+            "ofi_z": snapshot.ofi_zscore,
+            "vpin": snapshot.vpin,
+        }
+
     def _scan_markets(self) -> List[Dict]:
         active_assets = set()
         for cid in self.active_positions:
@@ -1380,14 +1510,62 @@ class LiveSessionV4:
         has_losses = self.consecutive_losses > 0
 
         analyses = []
+        ai_candidates = []  # markets that pass pre-screen, queued for LLM
+
         for cid in SCAN_CONTRACTS:
             tick = self.stream.get_snapshot(cid)
-            if tick:
-                meta = CONTRACT_META.get(cid, {})
-                a = analyze_market(tick, meta, active_assets, equity_consensus, equity_bar_trend, has_losses)
+            if not tick:
+                continue
+            meta = CONTRACT_META.get(cid, {})
+
+            # ── Pre-screen (fast algo gates — no LLM cost) ──
+            a = analyze_market(tick, meta, active_assets, equity_consensus, equity_bar_trend, has_losses)
+
+            # Compute Goldilocks signals for snapshot
+            ofi_z = compute_ofi_z(tick)
+            vpin = compute_vpin(tick)
+            a["ofi_z"] = round(ofi_z, 3)
+            a["vpin"] = round(vpin, 3)
+
+            # If algo pre-screen fully rejects (not even close), skip LLM
+            # We only pass to LLM if there's enough data to reason about
+            total_vol = tick.buy_volume + tick.sell_volume
+            has_data = (
+                tick.last_price > 0
+                and total_vol >= MIN_FLOW_TRADES
+                and len(tick.bars) >= 10
+                and tick.spread_ticks <= 4
+                and cid not in self.active_positions  # no double positions
+            )
+
+            if has_data:
+                ai_candidates.append((cid, tick, meta, a, ofi_z, vpin))
+            else:
                 analyses.append(a)
 
-        analyses.sort(key=lambda x: -x["score"])
+        # ── LLM Decision: call AI for each candidate ──
+        # Process up to 3 best candidates (sort by abs OFI Z desc)
+        ai_candidates.sort(key=lambda x: -abs(x[4]))
+        for cid, tick, meta, a, ofi_z, vpin in ai_candidates[:3]:
+            logger.info(f"  >> Calling LLM for {meta.get('name', cid)} (OFI_Z={ofi_z:+.2f} VPIN={vpin:.3f})")
+            snapshot = self._build_snapshot(tick, meta, ofi_z, vpin)
+            decision = self._ai_decide(snapshot, meta)
+
+            if decision:
+                a["signal"] = decision["signal"]
+                a["conviction"] = decision["conviction"]
+                a["thesis"] = [decision["thesis"]]
+                a["sl_ticks"] = decision["sl_ticks"]
+                a["tp_ticks"] = decision["tp_ticks"]
+                a["score"] = decision["conviction"]  # use AI conviction as score
+                a["regime"] = decision.get("regime", "unknown")
+                logger.info(f"     AI → {decision['signal']} conv={decision['conviction']:.0f} | {decision['thesis'][:80]}")
+            else:
+                logger.info(f"     AI → NO_TRADE")
+
+            analyses.append(a)
+
+        analyses.sort(key=lambda x: -x.get("score", 0))
         return analyses
 
     def _log_scan(self, cycle: int, analyses: List[Dict]):
@@ -1411,14 +1589,15 @@ class LiveSessionV4:
         for a in analyses[:6]:
             sig = a["signal"]
             emoji = "🟢" if sig == "LONG" else "🔴" if sig == "SHORT" else "⚪"
+            thesis_str = "; ".join(a.get("thesis", [])) if isinstance(a.get("thesis"), list) else str(a.get("thesis",""))
             logger.info(
                 f"  {emoji} {a['contract']:4s} ${a['price']:>10,.2f} | "
                 f"spr={a['spread_ticks']:.0f}t B:{a.get('buy_vol',0)} S:{a.get('sell_vol',0)} | "
                 f"score={a['score']:.0f} conv={a['conviction']:.0f} | {sig}"
+                + (f" | {thesis_str}" if sig == "NO_TRADE" and thesis_str else "")
             )
             if sig != "NO_TRADE":
-                thesis = "; ".join(a.get("thesis", [])) if isinstance(a.get("thesis"), list) else str(a.get("thesis",""))
-                logger.info(f"       → {thesis}")
+                logger.info(f"       → {thesis_str}")
 
     def _execute_trade(self, analysis: Dict):
         cid = analysis["contract_id"]
