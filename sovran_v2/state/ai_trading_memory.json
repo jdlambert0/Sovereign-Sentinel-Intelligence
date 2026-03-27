@@ -1,15 +1,15 @@
 {
-  "trades_executed": 50,
-  "total_pnl": 0.0,
+  "trades_executed": 107,
+  "total_pnl": -28.7,
   "strategies_tested": {
     "momentum": {
-      "trades": 15,
-      "wins": 0,
-      "total_pnl": 0.0,
-      "avg_hold_time": 0.0
+      "trades": 28,
+      "wins": 2,
+      "total_pnl": -28.7,
+      "avg_hold_time": 29.25705497532098
     },
     "mean_reversion": {
-      "trades": 35,
+      "trades": 79,
       "wins": 0,
       "total_pnl": 0.0,
       "avg_hold_time": 0.0
@@ -18,22 +18,22 @@
   "market_patterns": {},
   "performance_by_contract": {
     "CON.F.US.MYM.M26": {
-      "trades": 15,
+      "trades": 32,
       "wins": 0,
       "losses": 0,
       "total_pnl": 0.0
     },
     "CON.F.US.MNQ.M26": {
-      "trades": 12,
-      "wins": 0,
+      "trades": 34,
+      "wins": 1,
       "losses": 0,
-      "total_pnl": 0.0
+      "total_pnl": 19.26
     },
     "CON.F.US.M2K.M26": {
-      "trades": 16,
-      "wins": 0,
-      "losses": 0,
-      "total_pnl": 0.0
+      "trades": 21,
+      "wins": 1,
+      "losses": 1,
+      "total_pnl": -2.219999999999999
     },
     "CON.F.US.MCLE.K26": {
       "trades": 4,
@@ -48,30 +48,86 @@
       "total_pnl": 0.0
     },
     "CON.F.US.MES.M26": {
-      "trades": 2,
+      "trades": 15,
       "wins": 0,
-      "losses": 0,
-      "total_pnl": 0.0
+      "losses": 1,
+      "total_pnl": -45.74
     }
   },
   "performance_by_time": {},
   "performance_by_regime": {
     "trending_down": {
-      "trades": 8,
+      "trades": 13,
       "wins": 0,
       "total_pnl": 0.0
     },
     "choppy": {
-      "trades": 35,
+      "trades": 79,
       "wins": 0,
       "total_pnl": 0.0
     },
     "trending_up": {
-      "trades": 7,
+      "trades": 15,
       "wins": 0,
       "total_pnl": 0.0
+    },
+    "ranging": {
+      "trades": 0,
+      "wins": 2,
+      "total_pnl": 38.52
+    },
+    "trending": {
+      "trades": 0,
+      "wins": 0,
+      "total_pnl": -67.22
     }
   },
   "lessons_learned": [],
-  "last_update": "2026-03-27T14:07:31.098006+00:00"
+  "last_update": "2026-03-27T15:50:17.001508+00:00",
+  "mfe_mae_data": [
+    {
+      "contract": "CON.F.US.M2K.M26",
+      "strategy": "momentum",
+      "regime": "ranging",
+      "pnl": 19.26,
+      "mfe": 28.0,
+      "mae": -3.0,
+      "hold_time": 249.0,
+      "timestamp": "2026-03-27T15:37:12.866496+00:00",
+      "is_win": true
+    },
+    {
+      "contract": "CON.F.US.M2K.M26",
+      "strategy": "momentum",
+      "regime": "trending",
+      "pnl": -21.48,
+      "mfe": 5.0,
+      "mae": -16.0,
+      "hold_time": 41.2,
+      "timestamp": "2026-03-27T15:37:54.312756+00:00",
+      "is_win": false
+    },
+    {
+      "contract": "CON.F.US.MNQ.M26",
+      "strategy": "momentum",
+      "regime": "ranging",
+      "pnl": 19.26,
+      "mfe": 33.0,
+      "mae": -4.0,
+      "hold_time": 51.4,
+      "timestamp": "2026-03-27T15:40:39.239725+00:00",
+      "is_win": true
+    },
+    {
+      "contract": "CON.F.US.MES.M26",
+      "strategy": "momentum",
+      "regime": "trending",
+      "pnl": -45.74,
+      "mfe": 10.0,
+      "mae": -25.0,
+      "hold_time": 536.3,
+      "timestamp": "2026-03-27T15:50:17.001508+00:00",
+      "is_win": false
+    }
+  ]
 }
