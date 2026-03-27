@@ -724,16 +724,21 @@ def analyze_market(tick: MarketTick, meta: Dict,
         return result
 
     # ── Goldilocks Gate: OFI Z-Score (institutional displacement) ──
+    # NOTE: When using AI Decision Engine (file_ipc), skip these gates!
+    # The AI makes its own decisions based on probability, not simple thresholds.
+    # These gates are for built-in scoring only.
+    USE_AI_ENGINE = os.environ.get("AI_PROVIDER", "").lower() == "file_ipc"
+
     ofi_z = compute_ofi_z(tick)
     result["ofi_z"] = round(ofi_z, 3)
-    if abs(ofi_z) < 1.5:
+    if not USE_AI_ENGINE and abs(ofi_z) < 1.5:
         result["thesis"] = [f"OFI Z-Score too low ({ofi_z:.2f} < 1.5 Goldilocks threshold — no institutional displacement)"]
         return result
 
     # ── Goldilocks Gate: VPIN (probability of informed trading) ──
     vpin = compute_vpin(tick)
     result["vpin"] = round(vpin, 3)
-    if vpin < 0.55:
+    if not USE_AI_ENGINE and vpin < 0.55:
         result["thesis"] = [f"VPIN too low ({vpin:.2f} < 0.55 Goldilocks threshold — uninformed flow)"]
         return result
 
