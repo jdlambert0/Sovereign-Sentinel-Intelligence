@@ -40,6 +40,8 @@ import signal
 import threading
 import math
 import websocket
+import subprocess
+from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Tuple
@@ -239,6 +241,8 @@ class TradeResult:
     regime: str = ""
     partial_taken: bool = False
     profit_capture_ratio: float = 0.0  # actual_pnl / mfe_potential
+    sl_ticks: float = 0.0  # Stop loss distance in ticks
+    tp_ticks: float = 0.0  # Take profit distance in ticks
 
 
 # ── API Client ──────────────────────────────────────────────────────────
@@ -1855,6 +1859,8 @@ class LiveSessionV4:
             regime=pos.regime_at_entry,
             partial_taken=pos.partial_taken,
             profit_capture_ratio=capture_ratio,
+            sl_ticks=pos.sl_ticks,
+            tp_ticks=pos.tp_ticks,
         )
         self.trades.append(result)
         self.session_pnl += trade_pnl
@@ -1866,6 +1872,27 @@ class LiveSessionV4:
 
         # Phase 3+4: Kaizen post-trade review
         self.kaizen.post_trade_review(result)
+
+        # Record outcome to AI trading memory (if thesis indicates AI trade)
+        if "P(continuation)" in pos.thesis or "P(reversion)" in pos.thesis:
+            try:
+                # Determine strategy from thesis
+                strategy = "momentum" if "P(continuation)" in pos.thesis else "mean_reversion"
+                # Extract regime from thesis or use position data
+                regime = pos.regime_at_entry if pos.regime_at_entry else "unknown"
+                # Import and call recorder
+                import subprocess
+                subprocess.run([
+                    sys.executable,
+                    str(Path(__file__).parent / "ipc" / "record_trade_outcome.py"),
+                    pos.contract_id,
+                    strategy,
+                    regime,
+                    str(trade_pnl),
+                    str(hold_time)
+                ], check=False)  # Don't crash if recorder fails
+            except Exception as e:
+                logger.warning(f"Failed to record AI outcome: {e}")
 
         # Phase 3: Log rolling stats
         stats = self.kaizen.get_rolling_stats(self.trades)

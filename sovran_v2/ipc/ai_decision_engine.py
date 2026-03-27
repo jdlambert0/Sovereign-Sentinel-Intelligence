@@ -93,6 +93,39 @@ class TradingMemory:
             }
         self.data["performance_by_regime"][regime]["trades"] += 1
 
+        # If outcome is provided, update win/loss stats
+        if outcome:
+            pnl = outcome.get("pnl", 0.0)
+            is_win = pnl > 0
+
+            # Update contract performance
+            self.data["performance_by_contract"][contract]["total_pnl"] += pnl
+            if is_win:
+                self.data["performance_by_contract"][contract]["wins"] += 1
+            elif pnl < 0:
+                self.data["performance_by_contract"][contract]["losses"] += 1
+
+            # Update strategy performance
+            self.data["strategies_tested"][strategy]["total_pnl"] += pnl
+            if is_win:
+                self.data["strategies_tested"][strategy]["wins"] += 1
+
+            # Update regime performance
+            self.data["performance_by_regime"][regime]["total_pnl"] += pnl
+            if is_win:
+                self.data["performance_by_regime"][regime]["wins"] += 1
+
+            # Update total P&L
+            self.data["total_pnl"] += pnl
+
+            # Update average hold time
+            if "hold_time" in outcome:
+                strat_data = self.data["strategies_tested"][strategy]
+                current_avg = strat_data.get("avg_hold_time", 0.0)
+                current_count = strat_data["trades"]
+                new_avg = ((current_avg * (current_count - 1)) + outcome["hold_time"]) / current_count
+                strat_data["avg_hold_time"] = new_avg
+
         self.save()
 
     def query_similar_conditions(self, contract: str, regime: str,
