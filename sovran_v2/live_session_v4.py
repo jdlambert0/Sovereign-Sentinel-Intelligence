@@ -1536,6 +1536,25 @@ class LiveSessionV4:
         if stats["count"] >= 3:
             logger.info(f"   ROLLING({stats['count']}): WR={stats['win_rate']:.0%} PF={stats['profit_factor']:.2f} Capture={stats['avg_capture_ratio']:.1%}")
 
+        # Record outcome to AI trading memory (Bayesian learning)
+        try:
+            _strategy = "momentum" if "P(continuation)" in pos.thesis else "mean_reversion"
+            _regime = pos.regime_at_entry if pos.regime_at_entry else "unknown"
+            import subprocess as _sp
+            _sp.run([
+                sys.executable,
+                str(Path(__file__).parent / "ipc" / "record_trade_outcome.py"),
+                pos.contract_id,
+                _strategy,
+                _regime,
+                str(trade_pnl),
+                str(hold_time),
+                str(getattr(pos, "mfe", 0.0)),
+                str(getattr(pos, "mae", 0.0)),
+            ], check=False, timeout=10)
+        except Exception as _e:
+            logger.warning(f"Failed to record AI outcome: {_e}")
+
         # Save to trade history
         self._save_trade_history(result)
 
