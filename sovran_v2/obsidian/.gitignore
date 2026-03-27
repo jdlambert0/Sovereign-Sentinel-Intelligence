@@ -1,4 +1,8 @@
-# Generated Obsidian notes (auto-created by Sovran)
-# Keep .gitignore only, actual notes are generated at runtime
-*.md
+# Generated Obsidian notes — transient runtime files excluded, docs committed
+# Exclude only auto-generated runtime noise
+trade_log.md
+observations/
+ai_loop_log_*.md
+# All other .md files (architecture, bug logs, handoffs) are committed
+!*.md
 !.gitignore

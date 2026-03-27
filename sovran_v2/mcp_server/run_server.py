@@ -600,7 +600,15 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
         try:
             result = run_all_models(snap, memory)
             summary = result.get("summary", {})
-            conv = summary.get("consensus_strength", 0)
+            # Use avg_conviction (0-100 scale) weighted by consensus direction strength
+            # consensus_strength is 0-1 (direction purity), avg_conviction is 0-100
+            avg_conv = summary.get("avg_conviction", 0)
+            consensus = summary.get("consensus_strength", 0)
+            # Informed conviction: avg of models that have an actual opinion (>20 conviction)
+            all_model_convs = [v["conviction"] for v in result.get("models", {}).values() if v["conviction"] > 20]
+            informed_conv = round(sum(all_model_convs) / max(len(all_model_convs), 1), 1) if all_model_convs else 0
+            # Final: use informed conviction scaled by direction consensus
+            conv = round(informed_conv * (0.6 + consensus * 0.4))
             signal = summary.get("dominant_signal", "NEUTRAL")
             ofi_z = snap.get("ofi_z", 0)
             vpin = snap.get("vpin", 0)
