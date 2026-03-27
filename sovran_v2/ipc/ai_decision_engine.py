@@ -140,6 +140,64 @@ class TradingMemory:
             "avg_loss": 0.0
         })
 
+    def get_bayesian_win_rate(self, strategy: str, prior: float = 0.5,
+                              min_samples: int = 5) -> float:
+        """
+        Bayesian belief updating for strategy win rates.
+        
+        Uses Beta-Binomial conjugate prior:
+        - Prior: Beta(alpha, beta) where alpha=beta=2 (weakly informative)
+        - Posterior: Beta(alpha + wins, beta + losses)
+        - Returns posterior mean as updated win rate
+        
+        This is the key Week 2 feature: the system LEARNS from outcomes
+        and adjusts future probability estimates.
+        """
+        strat_data = self.data.get("strategies_tested", {}).get(strategy, {})
+        wins = strat_data.get("wins", 0)
+        trades = strat_data.get("trades", 0)
+        losses = trades - wins
+
+        if trades < min_samples:
+            return prior  # Not enough data, use static prior
+
+        # Beta-Binomial conjugate prior
+        # Prior: Beta(2, 2) -> centered at 0.5, weakly informative
+        alpha_prior = 2.0
+        beta_prior = 2.0
+
+        # Posterior: Beta(alpha_prior + wins, beta_prior + losses)
+        alpha_post = alpha_prior + wins
+        beta_post = beta_prior + losses
+
+        # Posterior mean
+        posterior_mean = alpha_post / (alpha_post + beta_post)
+
+        # Credible interval width (for logging/diagnostics)
+        # 95% CI is approximately mean +/- 1.96 * sqrt(var)
+        variance = (alpha_post * beta_post) / ((alpha_post + beta_post)**2 * (alpha_post + beta_post + 1))
+        ci_width = 1.96 * math.sqrt(variance) * 2
+
+        logger.info(f"  Bayesian update [{strategy}]: prior={prior:.2f} -> "
+                    f"posterior={posterior_mean:.2f} (W={wins}/L={losses}, "
+                    f"95%CI width={ci_width:.2f})")
+
+        return posterior_mean
+
+    def get_bayesian_contract_rate(self, contract: str, prior: float = 0.5) -> float:
+        """Bayesian win rate per contract (same method, different data slice)."""
+        contract_data = self.data.get("performance_by_contract", {}).get(contract, {})
+        wins = contract_data.get("wins", 0)
+        trades = contract_data.get("trades", 0)
+        losses = trades - wins
+
+        if trades < 3:
+            return prior
+
+        alpha_post = 2.0 + wins
+        beta_post = 2.0 + losses
+        return alpha_post / (alpha_post + beta_post)
+
     def get_best_strategy_for(self, contract: str, regime: str) -> str:
         """Return the best performing strategy for this contract/regime."""
         # TODO: Implement sophisticated strategy selection
@@ -211,7 +269,7 @@ class ProbabilityCalculator:
             return 0.0
 
         # Expected value per trade (μ)
-        ev = TradingMemory.expected_value(win_rate, avg_win, avg_loss)
+        ev = ProbabilityCalculator.expected_value(win_rate, avg_win, avg_loss)
 
         # Variance per trade (σ²)
         loss_rate = 1 - win_rate
@@ -334,19 +392,49 @@ class AIDecisionEngine:
         mean_rev_prob = self.calc.mean_reversion_probability(ofi_z)
         momentum_prob = self.calc.momentum_probability(ofi_z, vpin, regime)
 
+        # --- BAYESIAN BELIEF UPDATING (Week 2 priority) ---
+        # Blend model probability with Bayesian posterior from actual outcomes.
+        # This is how the system LEARNS: static priors get updated by real data.
+        bayesian_strat_rate = self.memory.get_bayesian_win_rate(strategy, prior=0.5)
+        bayesian_contract_rate = self.memory.get_bayesian_contract_rate(contract_id, prior=0.5)
+
+        # Blend: 60% model probability, 25% strategy Bayesian, 15% contract Bayesian
+        # As sample size grows, Bayesian component dominates naturally
+        def blend_probability(model_prob: float) -> float:
+            return (0.60 * model_prob +
+                    0.25 * bayesian_strat_rate +
+                    0.15 * bayesian_contract_rate)
+
         # Decide which strategy to use
+        # ROUND-ROBIN RULE: NEVER return no_trade. Always pick a direction.
+        # "If all markets look bad, pick best probability and trade anyway."
+        # When signal is weak, we reduce conviction instead of refusing to trade.
         if strategy == "mean_reversion":
-            win_probability = mean_rev_prob
-            signal = "short" if ofi_z > 1.0 else "long" if ofi_z < -1.0 else "no_trade"
-            thesis = f"Mean reversion: Z-score={ofi_z:.2f}, P(reversion)={mean_rev_prob:.2f}"
+            win_probability = blend_probability(mean_rev_prob)
+            if ofi_z > 1.0:
+                signal = "short"
+            elif ofi_z < -1.0:
+                signal = "long"
+            else:
+                # Weak signal zone — still pick direction, flag as low-conviction
+                signal = "short" if ofi_z > 0 else "long"
+                win_probability *= 0.85  # Discount for weak setup
+            thesis = f"Mean reversion: Z-score={ofi_z:.2f}, P(model)={mean_rev_prob:.2f}, P(bayesian)={win_probability:.2f}"
         elif strategy == "momentum":
-            win_probability = momentum_prob
-            signal = "long" if ofi_z > 0.5 else "short" if ofi_z < -0.5 else "no_trade"
-            thesis = f"Momentum: OFI_Z={ofi_z:.2f}, VPIN={vpin:.2f}, P(continuation)={momentum_prob:.2f}"
+            win_probability = blend_probability(momentum_prob)
+            if ofi_z > 0.5:
+                signal = "long"
+            elif ofi_z < -0.5:
+                signal = "short"
+            else:
+                # Weak signal zone — still pick direction, flag as low-conviction
+                signal = "long" if ofi_z > 0 else "short"
+                win_probability *= 0.85  # Discount for weak setup
+            thesis = f"Momentum: OFI_Z={ofi_z:.2f}, VPIN={vpin:.2f}, P(model)={momentum_prob:.2f}, P(bayesian)={win_probability:.2f}"
         else:  # volatility_harvesting
-            win_probability = 0.55  # Slight edge in choppy markets
+            win_probability = blend_probability(0.55)
             signal = "long" if ofi_z > 0 else "short"
-            thesis = f"Volatility harvest: Choppy market, small edge, ATR={atr:.1f}"
+            thesis = f"Volatility harvest: Choppy market, P(bayesian)={win_probability:.2f}, ATR={atr:.1f}"
 
         # Dynamic risk based on opportunity
         # "Use the trade to determine what you risk"
@@ -365,6 +453,32 @@ class AIDecisionEngine:
         else:
             # Even negative EV trades can be learning trades
             conviction = 40  # Low but non-zero
+
+        # --- ASSET PRIORITY WEIGHTING (Kaizen #4) ---
+        # MCL has only win (+$38.48). MES/MNQ have 100% loss rate across 9 trades.
+        # Boost energy/metals conviction, penalize equity indices.
+        asset_class = snapshot.get('asset_class', '')
+        if not asset_class:
+            # Infer from contract_id
+            cid_upper = contract_id.upper()
+            if 'MCL' in cid_upper or 'CL' in cid_upper:
+                asset_class = 'energy'
+            elif 'MGC' in cid_upper or 'GC' in cid_upper:
+                asset_class = 'metals'
+            elif any(x in cid_upper for x in ['MES', 'MNQ', 'MYM', 'M2K']):
+                asset_class = 'equity_index'
+            else:
+                asset_class = 'other'
+
+        if asset_class == 'energy':
+            conviction = min(100, int(conviction * 1.10))  # +10% boost
+            thesis += " [+10% energy priority: MCL has proven edge]"
+        elif asset_class == 'metals':
+            conviction = min(100, int(conviction * 1.10))  # +10% boost
+            thesis += " [+10% metals priority: MGC $1/tick value]"
+        elif asset_class == 'equity_index':
+            conviction = max(0, int(conviction * 0.80))  # -20% penalty
+            thesis += " [-20% equity penalty: 0% win rate on MES/MNQ historically]"
 
         # Position sizing using Kelly Criterion
         kelly_size = self.calc.kelly_criterion(
@@ -402,6 +516,27 @@ class AIDecisionEngine:
         """
         snapshot = request.get('snapshot_data', {})
         account_balance = request.get('account_balance', 150000)
+
+        # --- OVERNIGHT LOCKOUT (Kaizen #6) ---
+        # Hard block outside 8am-4pm CT. All overnight trades were losses.
+        from zoneinfo import ZoneInfo
+        ct_now = datetime.now(ZoneInfo("America/Chicago"))
+        hour_ct = ct_now.hour
+        if hour_ct < 8 or hour_ct >= 16:
+            contract_id = snapshot.get('contract_id', 'UNKNOWN')
+            logger.info(f"OVERNIGHT LOCKOUT: {contract_id} blocked at {ct_now.strftime('%H:%M')} CT (allowed: 8am-4pm)")
+            return {
+                "signal": "no_trade",
+                "conviction": 0,
+                "thesis": f"Overnight lockout: {ct_now.strftime('%H:%M')} CT is outside 8am-4pm window. All overnight trades were losses.",
+                "stop_distance_points": 0,
+                "target_distance_points": 0,
+                "frameworks_cited": ["risk_management", "kaizen_overnight_lockout"],
+                "time_horizon": "none",
+                "expected_value": 0,
+                "win_probability": 0,
+                "position_size": 0
+            }
 
         # Analyze this contract
         analysis = self.analyze_contract(snapshot, account_balance)
@@ -464,6 +599,9 @@ def check_risk_of_ruin(engine: AIDecisionEngine) -> Tuple[float, str]:
     """
     Check current Risk of Ruin and return alert status.
 
+    Uses ONLY contract-level data (single source of truth) to avoid
+    double-counting wins/losses.
+
     Returns:
         (ror_percentage, alert_message)
     """
@@ -471,41 +609,40 @@ def check_risk_of_ruin(engine: AIDecisionEngine) -> Tuple[float, str]:
     if total_trades < 10:
         return 0.0, ""  # Need minimum sample size
 
-    # Calculate win rate and avg win/loss
+    # Aggregate from contract data ONLY (single source of truth)
     wins = 0
     losses = 0
-    total_win_amount = 0.0
-    total_loss_amount = 0.0
+    total_win_pnl = 0.0
+    total_loss_pnl = 0.0
 
     for contract_data in engine.memory.data.get("performance_by_contract", {}).values():
-        wins += contract_data.get("wins", 0)
-        # Approximate losses from total trades - wins
-        total_pnl = contract_data.get("total_pnl", 0.0)
+        w = contract_data.get("wins", 0)
+        l = contract_data.get("losses", 0)
+        pnl = contract_data.get("total_pnl", 0.0)
+        wins += w
+        losses += l
+        if pnl > 0:
+            total_win_pnl += pnl
+        else:
+            total_loss_pnl += abs(pnl)
 
-    # Use strategy data for more accurate numbers
-    for strat_data in engine.memory.data.get("strategies_tested", {}).values():
-        wins += strat_data.get("wins", 0)
-
-    if total_trades == 0:
+    if wins + losses == 0:
         return 0.0, ""
 
-    win_rate = wins / total_trades
-    total_pnl = engine.memory.data.get("total_pnl", 0.0)
+    win_rate = wins / (wins + losses)
 
-    # Estimate avg win/loss from total P&L
-    if wins > 0:
-        avg_win = max(10.0, abs(total_pnl) / wins) if total_pnl > 0 else 10.0
-    else:
-        avg_win = 10.0
+    # Calculate avg win/loss from actual P&L
+    avg_win = (total_win_pnl / wins) if wins > 0 else 10.0
+    avg_loss = (total_loss_pnl / losses) if losses > 0 else 10.0
 
-    if losses > 0:
-        avg_loss = max(10.0, abs(total_pnl) / losses) if total_pnl < 0 else 10.0
-    else:
-        avg_loss = 10.0
+    # Floors to prevent degenerate math
+    avg_win = max(5.0, avg_win)
+    avg_loss = max(5.0, avg_loss)
 
-    # Calculate Risk of Ruin
-    account_balance = 148000  # Current balance estimate
-    ror = TradingMemory.risk_of_ruin(win_rate, avg_win, avg_loss, account_balance)
+    # Use current account balance from memory if available, else estimate
+    account_balance = engine.memory.data.get("account_balance", 148000)
+
+    ror = ProbabilityCalculator.risk_of_ruin(win_rate, avg_win, avg_loss, account_balance)
 
     # Alert if RoR > 1%
     if ror > 0.01:

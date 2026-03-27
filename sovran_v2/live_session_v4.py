@@ -55,8 +55,8 @@ SCAN_CONTRACTS = [
     "CON.F.US.MES.M26",
     "CON.F.US.MYM.M26",
     "CON.F.US.M2K.M26",
-    "CON.F.US.MGC.J26",
-    "CON.F.US.MCLE.K26",
+    "CON.F.US.MGC.M26",
+    "CON.F.US.MCLE.M26",
 ]
 
 CONTRACT_META = {
@@ -64,8 +64,8 @@ CONTRACT_META = {
     "CON.F.US.MES.M26": {"name": "MES", "tick_size": 0.25, "tick_value": 1.25, "point_value": 5.00, "asset": "equity_index"},
     "CON.F.US.MYM.M26": {"name": "MYM", "tick_size": 1.00, "tick_value": 0.50, "point_value": 0.50, "asset": "equity_index"},
     "CON.F.US.M2K.M26": {"name": "M2K", "tick_size": 0.10, "tick_value": 0.50, "point_value": 5.00, "asset": "equity_index"},
-    "CON.F.US.MGC.J26": {"name": "MGC", "tick_size": 0.10, "tick_value": 1.00, "point_value": 10.00, "asset": "metals"},
-    "CON.F.US.MCLE.K26": {"name": "MCL", "tick_size": 0.01, "tick_value": 1.00, "point_value": 100.00, "asset": "energy"},
+    "CON.F.US.MGC.M26": {"name": "MGC", "tick_size": 0.10, "tick_value": 1.00, "point_value": 10.00, "asset": "metals"},
+    "CON.F.US.MCLE.M26": {"name": "MCL", "tick_size": 0.01, "tick_value": 1.00, "point_value": 100.00, "asset": "energy"},
 }
 
 # Risk parameters
@@ -294,9 +294,9 @@ class TopStepXClient:
         r = self.client.post("/api/Order/place", json=payload, headers=self._headers())
         data = r.json()
         if data.get("success"):
-            logger.info(f"  ✅ Filled! Order ID: {data.get('orderId')}")
+            logger.info(f"  [OK] Filled! Order ID: {data.get('orderId')}")
         else:
-            logger.error(f"  ❌ Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
+            logger.error(f"  [FAIL] Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
         return data
 
     def cancel_order(self, order_id: int) -> Dict:
@@ -396,7 +396,7 @@ class MarketDataStream:
                 self._process_trades(tick, args[1])
                 # Debug: log first trade for each contract
                 if tick.buy_volume + tick.sell_volume == 1:
-                    logger.info(f"  📊 First trade on {CONTRACT_META.get(cid, {}).get('name', cid)}: B:{tick.buy_volume} S:{tick.sell_volume}")
+                    logger.info(f"  [DATA] First trade on {CONTRACT_META.get(cid, {}).get('name', cid)}: B:{tick.buy_volume} S:{tick.sell_volume}")
 
     def _process_quote(self, tick: MarketTick, q: Dict):
         now = time.time()
@@ -679,7 +679,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
         trend_pts = min(20, 20 * abs(bar_trend) / 0.6)
         score += trend_pts
         direction_score += bar_trend * 1.5
-        signals.append(f"Bars {'↑' if bar_trend>0 else '↓'} {bar_trend:+.2f}")
+        signals.append(f"Bars {'+' if bar_trend>0 else '-'} {bar_trend:+.2f}")
         
         # Phase 1: HARD BLOCK if windowed flow contradicts bar trend
         if (w_ratio > 0.15 and bar_trend < -0.3) or (w_ratio < -0.15 and bar_trend > 0.3):
@@ -749,7 +749,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
             acc_pts = min(10, 10 * abs(net_accel) / 15)
             score += acc_pts
             direction_score += 0.3 if net_accel > 0 else -0.3
-            signals.append(f"Accel {'↑' if net_accel>0 else '↓'} Δ{net_accel:+d}")
+            signals.append(f"Accel {'+' if net_accel>0 else '-'} Δ{net_accel:+d}")
 
     # ── Signal 7: VWAP Positioning — 0-10 pts ──
     if tick.vwap > 0 and tick.last_price > 0:
@@ -762,7 +762,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
                 signals.append(f"VWAP {'above' if vwap_pct>0 else 'below'} ({vwap_pct:+.3%})")
             elif (vwap_pct > 0 and direction_score < -0.3) or (vwap_pct < 0 and direction_score > 0.3):
                 score *= 0.85  # Slight penalty for going against VWAP
-                signals.append(f"⚠️ Against VWAP ({vwap_pct:+.3%})")
+                signals.append(f"[WARN] Against VWAP ({vwap_pct:+.3%})")
 
     # ── Signal 7b: Activity Level — 0-5 pts ──
     if tick.tick_count > 200:
@@ -790,11 +790,11 @@ def analyze_market(tick: MarketTick, meta: Dict,
             if (direction_score > 0 and combined > 0) or \
                (direction_score < 0 and combined < 0):
                 score += 15
-                signals.append(f"Equity consensus ✓ (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
+                signals.append(f"Equity consensus [OK] (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
             elif (direction_score > 0 and combined < -0.2) or \
                  (direction_score < 0 and combined > 0.2):
                 score *= 0.2  # 80% penalty for counter-trend
-                signals.append(f"⛔ AGAINST consensus (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
+                signals.append(f"[BLOCK] AGAINST consensus (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
 
     # ── Price Trend Veto ──
     # If bars consistently decline but flow says BUY, veto the long.
@@ -804,11 +804,11 @@ def analyze_market(tick: MarketTick, meta: Dict,
         if price_trend < -0.4 and direction_score > 0:
             # Bars falling but flow says buy → likely catching a falling knife
             score *= 0.3  # 70% penalty
-            signals.append(f"⛔ Price veto: bars↓{price_trend:+.2f} vs flow↑")
+            signals.append(f"[BLOCK] Price veto: bars-{price_trend:+.2f} vs flow+")
         elif price_trend > 0.4 and direction_score < 0:
             # Bars rising but flow says sell → likely selling into strength
             score *= 0.3
-            signals.append(f"⛔ Price veto: bars↑{price_trend:+.2f} vs flow↓")
+            signals.append(f"[BLOCK] Price veto: bars+{price_trend:+.2f} vs flow-")
 
     # ── Determine Direction ──
     if direction_score > 0.3:
@@ -1140,7 +1140,7 @@ class LiveSessionV4:
                     for t in self.stream.ticks.values()
                 )
                 if total_bsvol == 0:
-                    logger.warning("⚠️ Trade feed dead — 0 buy/sell volume. Re-subscribing...")
+                    logger.warning("[WARN] Trade feed dead — 0 buy/sell volume. Re-subscribing...")
                     try:
                         for cid in SCAN_CONTRACTS:
                             self.stream.ws.send(json.dumps({
@@ -1164,7 +1164,7 @@ class LiveSessionV4:
                     continue
                 # Circuit breaker: 3 consecutive losses → wait 5 min
                 if self.consecutive_losses >= 3:
-                    if time.time() - self.last_trade_time < 300:
+                    if time.time() - self.last_trade_time < 1800:
                         if cycle % 20 == 0:
                             logger.warning(f"Circuit breaker: {self.consecutive_losses} consecutive losses, cooling down")
                         continue
@@ -1253,7 +1253,7 @@ class LiveSessionV4:
                     unrealized = (tick.last_price - pos.entry_price) / ts * tv
                 else:
                     unrealized = (pos.entry_price - tick.last_price) / ts * tv
-                trail = " 🔒" if pos.trail_active else ""
+                trail = " [LOCK]" if pos.trail_active else ""
                 pos_str += f" | {pos.side} {meta.get('name','')} ${unrealized:+.2f}{trail}"
 
         phase, _ = get_session_phase()
@@ -1261,7 +1261,7 @@ class LiveSessionV4:
         logger.info(f"\n[{cycle}/{self.max_cycles}] msgs={self.stream.message_count} pnl=${self.session_pnl:+.2f} losses={self.consecutive_losses} phase={phase} thresh={eff_thresh}{pos_str}")
         for a in analyses[:6]:
             sig = a["signal"]
-            emoji = "🟢" if sig == "LONG" else "🔴" if sig == "SHORT" else "⚪"
+            emoji = "[LONG]" if sig == "LONG" else "[SHORT]" if sig == "SHORT" else "[--]"
             logger.info(
                 f"  {emoji} {a['contract']:4s} ${a['price']:>10,.2f} | "
                 f"spr={a['spread_ticks']:.0f}t B:{a.get('buy_vol',0)} S:{a.get('sell_vol',0)} | "

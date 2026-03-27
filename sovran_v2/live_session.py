@@ -653,7 +653,7 @@ class LiveSession:
 
             # Check if we should trade
             if len(positions) > 0:
-                logger.info("  ⏳ Position already open — monitoring")
+                logger.info("  [WAIT] Position already open — monitoring")
                 continue
 
             if len(self.trades) >= MAX_TRADES_SESSION:
@@ -671,7 +671,7 @@ class LiveSession:
                     self._execute_trade(best)
                 else:
                     remaining = self.trade_cooldown - (time.time() - self.last_trade_time)
-                    logger.info(f"  ⏳ Trade cooldown: {remaining:.0f}s remaining")
+                    logger.info(f"  [WAIT] Trade cooldown: {remaining:.0f}s remaining")
 
         # Phase 5: Cleanup
         logger.info("\n--- SESSION COMPLETE ---")
@@ -698,7 +698,7 @@ class LiveSession:
             logger.warning(f"Trade risk ${risk_dollars:.2f} exceeds remaining daily budget")
             return
 
-        logger.info(f"\n🎯 EXECUTING TRADE: {side} {MAX_POSITION_SIZE}x {meta.get('name', cid)}")
+        logger.info(f"\n[TRADE] EXECUTING TRADE: {side} {MAX_POSITION_SIZE}x {meta.get('name', cid)}")
         logger.info(f"   Price: ${analysis['price']:,.2f} | SL: {sl_ticks}t (${risk_dollars:.2f}) | TP: {tp_ticks}t | Conv: {analysis['conviction']:.0f}")
         logger.info(f"   Thesis: {analysis.get('thesis', 'N/A')}")
 
@@ -718,17 +718,17 @@ class LiveSession:
             if result.get("success"):
                 trade.order_id = result.get("orderId", 0)
                 trade.status = "open"
-                logger.info(f"   ✅ Order placed! ID: {trade.order_id}")
+                logger.info(f"   [OK] Order placed! ID: {trade.order_id}")
             else:
                 error_code = result.get("errorCode", -1)
                 error_msg = result.get("errorMessage", "Unknown")
                 trade.status = "error"
                 trade.thesis += f" | ERROR: code={error_code} {error_msg}"
-                logger.error(f"   ❌ Order failed: code={error_code} msg={error_msg}")
+                logger.error(f"   [FAIL] Order failed: code={error_code} msg={error_msg}")
         except Exception as e:
             trade.status = "error"
             trade.thesis += f" | EXCEPTION: {e}"
-            logger.error(f"   ❌ Order exception: {e}")
+            logger.error(f"   [FAIL] Order exception: {e}")
 
         self.trades.append(trade)
         self.last_trade_time = time.time()

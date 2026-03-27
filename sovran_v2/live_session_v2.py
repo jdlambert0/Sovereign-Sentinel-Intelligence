@@ -207,9 +207,9 @@ class TopStepXClient:
         r = self.client.post("/api/Order/place", json=payload, headers=self._headers())
         data = r.json()
         if data.get("success"):
-            logger.info(f"  ✅ Filled! Order ID: {data.get('orderId')}")
+            logger.info(f"  [OK] Filled! Order ID: {data.get('orderId')}")
         else:
-            logger.error(f"  ❌ Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
+            logger.error(f"  [FAIL] Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
         return data
 
     def close_position(self, contract_id: str) -> Dict:
@@ -540,7 +540,7 @@ def analyze_market(tick: MarketTick, meta: Dict, active_assets: set = None,
         elif (direction_score > 0 and equity_consensus < -0.15) or \
              (direction_score < 0 and equity_consensus > 0.15):
             score *= 0.3  # Heavy penalty for counter-trend
-            signals.append(f"⚠️ AGAINST equity consensus ({equity_consensus:+.2f})")
+            signals.append(f"[WARN] AGAINST equity consensus ({equity_consensus:+.2f})")
 
     # ── Determine Direction ──
     if direction_score > 0.3:
@@ -780,7 +780,7 @@ class LiveSessionV2:
             return
 
         thesis = "; ".join(analysis.get("thesis", []))
-        logger.info(f"\n🎯 TRADE: {side} {MAX_POSITION_SIZE}x {meta.get('name',cid)}")
+        logger.info(f"\n[TRADE] TRADE: {side} {MAX_POSITION_SIZE}x {meta.get('name',cid)}")
         logger.info(f"   Price: ${analysis['price']:,.2f} | SL: {sl_ticks}t (${risk:.2f}) | TP: {tp_ticks}t | Conv: {analysis['conviction']:.0f}")
         logger.info(f"   Thesis: {thesis}")
 
@@ -881,7 +881,7 @@ class LiveSessionV2:
         self.trades.append(result)
         self.session_pnl += trade_pnl
 
-        emoji = "💰" if trade_pnl > 0 else "💀"
+        emoji = "[WIN]" if trade_pnl > 0 else "[LOSS]"
         logger.info(f"\n{emoji} TRADE CLOSED: {result.side} {meta.get('name','')} | PnL: ${trade_pnl:+.2f} ({ticks:+.0f}t) | {exit_reason} | Hold: {hold_time:.0f}s")
         logger.info(f"   MFE: {pos.mfe:+.0f}t | MAE: {pos.mae:+.0f}t | Balance: ${new_balance:,.2f}")
 

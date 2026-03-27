@@ -575,8 +575,20 @@ class DecisionEngine:
             try:
                 if isinstance(self._backend, _FileIPCBackend):
                     # Pass structured snapshot data for IPC
+                    # Infer asset class from contract_id for priority weighting
+                    _cid = snapshot.contract_id.upper()
+                    if 'MCL' in _cid or '.CL.' in _cid:
+                        _asset_class = 'energy'
+                    elif 'MGC' in _cid or '.GC.' in _cid:
+                        _asset_class = 'metals'
+                    elif any(x in _cid for x in ['MES', 'MNQ', 'MYM', 'M2K']):
+                        _asset_class = 'equity_index'
+                    else:
+                        _asset_class = 'other'
+
                     snapshot_data = {
                         "contract_id": snapshot.contract_id,
+                        "asset_class": _asset_class,
                         "last_price": snapshot.last_price,
                         "best_bid": snapshot.best_bid,
                         "best_ask": snapshot.best_ask,

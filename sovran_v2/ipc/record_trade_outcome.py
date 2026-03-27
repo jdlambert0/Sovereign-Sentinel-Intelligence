@@ -121,7 +121,7 @@ def record_outcome(contract: str, strategy: str, regime: str, pnl: float, hold_t
     memory["total_pnl"] += pnl
 
     save_memory(memory)
-    print(f"✅ Outcome recorded: {strategy} {contract} {'WIN' if is_win else 'LOSS'} ${pnl:+.2f}")
+    print(f"[OK] Outcome recorded: {strategy} {contract} {'WIN' if is_win else 'LOSS'} ${pnl:+.2f}")
 
 
 if __name__ == "__main__":

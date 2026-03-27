@@ -318,7 +318,7 @@ def run_ai_trading_session(cycles: int = 360, interval: int = 10) -> Tuple[bool,
 
     # Ensure Autonomous IPC Responder is running
     ai_engine_process = subprocess.Popen(
-        ["python", "ipc/autonomous_responder.py"],
+        ["python", "ipc/ai_decision_engine.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True

@@ -253,9 +253,9 @@ class TopStepXClient:
         r = self.client.post("/api/Order/place", json=payload, headers=self._headers())
         data = r.json()
         if data.get("success"):
-            logger.info(f"  ✅ Filled! Order ID: {data.get('orderId')}")
+            logger.info(f"  [OK] Filled! Order ID: {data.get('orderId')}")
         else:
-            logger.error(f"  ❌ Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
+            logger.error(f"  [FAIL] Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
         return data
 
     def cancel_order(self, order_id: int) -> Dict:
@@ -355,7 +355,7 @@ class MarketDataStream:
                 self._process_trades(tick, args[1])
                 # Debug: log first trade for each contract
                 if tick.buy_volume + tick.sell_volume == 1:
-                    logger.info(f"  📊 First trade on {CONTRACT_META.get(cid, {}).get('name', cid)}: B:{tick.buy_volume} S:{tick.sell_volume}")
+                    logger.info(f"  [DATA] First trade on {CONTRACT_META.get(cid, {}).get('name', cid)}: B:{tick.buy_volume} S:{tick.sell_volume}")
 
     def _process_quote(self, tick: MarketTick, q: Dict):
         now = time.time()
@@ -643,7 +643,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
         # Penalty if windowed flow contradicts bar trend
         if (w_ratio > 0.1 and bar_trend < -0.3) or (w_ratio < -0.1 and bar_trend > 0.3):
             score *= 0.6
-            signals.append("⚠️ Flow vs bars conflict")
+            signals.append("[WARN] Flow vs bars conflict")
 
     # ── Signal 4: Price Momentum (EMA) — 0-15 pts ──
     if len(tick.price_history) >= 30:
@@ -720,7 +720,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
                 signals.append(f"VWAP {'above' if vwap_pct>0 else 'below'} ({vwap_pct:+.3%})")
             elif (vwap_pct > 0 and direction_score < -0.3) or (vwap_pct < 0 and direction_score > 0.3):
                 score *= 0.85  # Slight penalty for going against VWAP
-                signals.append(f"⚠️ Against VWAP ({vwap_pct:+.3%})")
+                signals.append(f"[WARN] Against VWAP ({vwap_pct:+.3%})")
 
     # ── Signal 7b: Activity Level — 0-5 pts ──
     if tick.tick_count > 200:
@@ -911,7 +911,7 @@ class LiveSessionV3:
                     for t in self.stream.ticks.values()
                 )
                 if total_bsvol == 0:
-                    logger.warning("⚠️ Trade feed dead — 0 buy/sell volume. Re-subscribing...")
+                    logger.warning("[WARN] Trade feed dead — 0 buy/sell volume. Re-subscribing...")
                     try:
                         for cid in SCAN_CONTRACTS:
                             self.stream.ws.send(json.dumps({
@@ -1018,7 +1018,7 @@ class LiveSessionV3:
                     unrealized = (tick.last_price - pos.entry_price) / ts * tv
                 else:
                     unrealized = (pos.entry_price - tick.last_price) / ts * tv
-                trail = " 🔒" if pos.trail_active else ""
+                trail = " [LOCK]" if pos.trail_active else ""
                 pos_str += f" | {pos.side} {meta.get('name','')} ${unrealized:+.2f}{trail}"
 
         logger.info(f"\n[{cycle}/{self.max_cycles}] msgs={self.stream.message_count} pnl=${self.session_pnl:+.2f} losses={self.consecutive_losses}{pos_str}")
@@ -1048,7 +1048,7 @@ class LiveSessionV3:
             return
 
         thesis = "; ".join(analysis.get("thesis", []))
-        logger.info(f"\n🎯 TRADE: {side} {MAX_POSITION_SIZE}x {meta.get('name',cid)}")
+        logger.info(f"\n[TRADE] TRADE: {side} {MAX_POSITION_SIZE}x {meta.get('name',cid)}")
         logger.info(f"   Price: ${analysis['price']:,.2f} | SL: {sl_ticks}t (${risk:.2f}) | TP: {tp_ticks}t | Conv: {analysis['conviction']:.0f}")
         logger.info(f"   Thesis: {thesis}")
         logger.info(f"   Regime: {analysis.get('regime','?')} | Bar trend: {analysis.get('bar_trend',0):+.2f} | Windowed flow: {analysis.get('w_flow',0):+.2f}")
@@ -1127,7 +1127,7 @@ class LiveSessionV3:
                             pos.trail_active = True
                             pos.trail_stop = new_sl
                             pos.sl_price = new_sl
-                            logger.info(f"🔒 TRAIL ACTIVATED: {meta.get('name','')} | SL moved to breakeven+{TRAIL_BREAKEVEN_TICKS}t @ {new_sl}")
+                            logger.info(f"[LOCK] TRAIL ACTIVATED: {meta.get('name','')} | SL moved to breakeven+{TRAIL_BREAKEVEN_TICKS}t @ {new_sl}")
                         else:
                             logger.warning(f"Trail SL modify failed: {result}")
                         break
@@ -1160,7 +1160,7 @@ class LiveSessionV3:
                             if result.get("success"):
                                 pos.trail_stop = ideal_sl
                                 pos.sl_price = ideal_sl
-                                logger.info(f"📈 TRAIL TIGHTENED: {meta.get('name','')} | SL → {ideal_sl} (MFE: {pos.mfe:+.0f}t)")
+                                logger.info(f"[UP] TRAIL TIGHTENED: {meta.get('name','')} | SL → {ideal_sl} (MFE: {pos.mfe:+.0f}t)")
                             break
                 except Exception as e:
                     logger.error(f"Trail tighten error: {e}")
@@ -1205,7 +1205,7 @@ class LiveSessionV3:
         self.trades.append(result)
         self.session_pnl += trade_pnl
 
-        emoji = "💰" if trade_pnl > 0 else "💀" if trade_pnl < 0 else "➖"
+        emoji = "[WIN]" if trade_pnl > 0 else "[LOSS]" if trade_pnl < 0 else "[FLAT]"
         logger.info(f"\n{emoji} TRADE CLOSED: {result.side} {meta.get('name','')} | PnL: ${trade_pnl:+.2f} ({ticks:+.0f}t) | {exit_reason}")
         logger.info(f"   MFE: {pos.mfe:+.0f}t | MAE: {pos.mae:+.0f}t | Trail: {'YES' if pos.trail_active else 'NO'}")
         logger.info(f"   Hold: {hold_time:.0f}s | Balance: ${new_balance:,.2f} | Losses: {self.consecutive_losses}")

@@ -101,7 +101,7 @@ MIN_CONVICTION_AFTER = 65
 MIN_FLOW_TRADES = 50
 
 # Phase 1: Trailing stop config
-TRAIL_ACTIVATION_MULT = 0.5
+TRAIL_ACTIVATION_MULT = 0.3    # Kaizen #5: tightened from 0.5 to capture profits earlier
 TRAIL_BREAKEVEN_TICKS = 2
 TRAIL_OFFSET_TICKS = 8
 
@@ -317,9 +317,9 @@ class TopStepXClient:
         r = self.client.post("/api/Order/place", json=payload, headers=self._headers())
         data = r.json()
         if data.get("success"):
-            logger.info(f"  ✅ Filled! Order ID: {data.get('orderId')}")
+            logger.info(f"  [OK] Filled! Order ID: {data.get('orderId')}")
         else:
-            logger.error(f"  ❌ Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
+            logger.error(f"  [FAIL] Failed: code={data.get('errorCode')} msg={data.get('errorMessage')}")
         return data
 
     def cancel_order(self, order_id: int) -> Dict:
@@ -419,7 +419,7 @@ class MarketDataStream:
                 self._process_trades(tick, args[1])
                 # Debug: log first trade for each contract
                 if tick.buy_volume + tick.sell_volume == 1:
-                    logger.info(f"  📊 First trade on {CONTRACT_META.get(cid, {}).get('name', cid)}: B:{tick.buy_volume} S:{tick.sell_volume}")
+                    logger.info(f"  [DATA] First trade on {CONTRACT_META.get(cid, {}).get('name', cid)}: B:{tick.buy_volume} S:{tick.sell_volume}")
 
     def _process_quote(self, tick: MarketTick, q: Dict):
         now = time.time()
@@ -775,7 +775,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
         trend_pts = min(20, 20 * abs(bar_trend) / 0.6)
         score += trend_pts
         direction_score += bar_trend * 1.5
-        signals.append(f"Bars {'↑' if bar_trend>0 else '↓'} {bar_trend:+.2f}")
+        signals.append(f"Bars {'+' if bar_trend>0 else '-'} {bar_trend:+.2f}")
         
         # Phase 1: HARD BLOCK if windowed flow contradicts bar trend
         if (w_ratio > 0.15 and bar_trend < -0.3) or (w_ratio < -0.15 and bar_trend > 0.3):
@@ -845,7 +845,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
             acc_pts = min(10, 10 * abs(net_accel) / 15)
             score += acc_pts
             direction_score += 0.3 if net_accel > 0 else -0.3
-            signals.append(f"Accel {'↑' if net_accel>0 else '↓'} Δ{net_accel:+d}")
+            signals.append(f"Accel {'+' if net_accel>0 else '-'} Δ{net_accel:+d}")
 
     # ── Signal 7: VWAP Positioning — 0-10 pts ──
     if tick.vwap > 0 and tick.last_price > 0:
@@ -858,7 +858,7 @@ def analyze_market(tick: MarketTick, meta: Dict,
                 signals.append(f"VWAP {'above' if vwap_pct>0 else 'below'} ({vwap_pct:+.3%})")
             elif (vwap_pct > 0 and direction_score < -0.3) or (vwap_pct < 0 and direction_score > 0.3):
                 score *= 0.85  # Slight penalty for going against VWAP
-                signals.append(f"⚠️ Against VWAP ({vwap_pct:+.3%})")
+                signals.append(f"[WARN] Against VWAP ({vwap_pct:+.3%})")
 
     # ── Signal 7b: Activity Level — 0-5 pts ──
     if tick.tick_count > 200:
@@ -886,11 +886,11 @@ def analyze_market(tick: MarketTick, meta: Dict,
             if (direction_score > 0 and combined > 0) or \
                (direction_score < 0 and combined < 0):
                 score += 15
-                signals.append(f"Equity consensus ✓ (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
+                signals.append(f"Equity consensus [OK] (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
             elif (direction_score > 0 and combined < -0.2) or \
                  (direction_score < 0 and combined > 0.2):
                 score *= 0.2  # 80% penalty for counter-trend
-                signals.append(f"⛔ AGAINST consensus (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
+                signals.append(f"[BLOCK] AGAINST consensus (f:{equity_consensus:+.2f} b:{equity_bar_trend:+.2f})")
 
     # ── Price Trend Veto ──
     # If bars consistently decline but flow says BUY, veto the long.
@@ -900,11 +900,11 @@ def analyze_market(tick: MarketTick, meta: Dict,
         if price_trend < -0.4 and direction_score > 0:
             # Bars falling but flow says buy → likely catching a falling knife
             score *= 0.3  # 70% penalty
-            signals.append(f"⛔ Price veto: bars↓{price_trend:+.2f} vs flow↑")
+            signals.append(f"[BLOCK] Price veto: bars-{price_trend:+.2f} vs flow+")
         elif price_trend > 0.4 and direction_score < 0:
             # Bars rising but flow says sell → likely selling into strength
             score *= 0.3
-            signals.append(f"⛔ Price veto: bars↑{price_trend:+.2f} vs flow↓")
+            signals.append(f"[BLOCK] Price veto: bars+{price_trend:+.2f} vs flow-")
 
     # ── Determine Direction ──
     if direction_score > 0.3:
@@ -1124,10 +1124,34 @@ class KaizenEngine:
                 ranked_cids.append(cid)
         return ranked_cids
 
-    def get_effective_conviction_threshold(self, has_losses: bool) -> int:
-        """Phase 4: Adaptive conviction threshold."""
+    def get_effective_conviction_threshold(self, has_losses: bool,
+                                              trades: List = None) -> int:
+        """Phase 4 + Kaizen #7: Adaptive conviction threshold.
+
+        Rolling win rate drives the conviction bar:
+        - Win rate > 55%  → lower threshold by up to 5 pts (lean into hot streak)
+        - Win rate 45-55% → no adjustment (neutral zone)
+        - Win rate < 40%  → raise threshold by up to 10 pts (tighten up when cold)
+
+        This makes the system naturally adapt: aggressive when it's reading
+        the market well, conservative when it's not.
+        """
         base = MIN_CONVICTION_AFTER if has_losses else MIN_CONVICTION_FIRST
-        return int(base + self.min_conviction_adjustment)
+
+        # Kaizen #7: Rolling win rate adjustment
+        rolling_adj = 0
+        if trades and len(trades) >= 5:
+            window = trades[-self.rolling_window:]
+            wins = sum(1 for t in window if t.pnl > 0)
+            wr = wins / len(window)
+            if wr > 0.55:
+                # Hot streak: lower threshold (more aggressive)
+                rolling_adj = -min(5, int((wr - 0.55) * 50))
+            elif wr < 0.40:
+                # Cold streak: raise threshold (more conservative)
+                rolling_adj = min(10, int((0.40 - wr) * 50))
+
+        return int(base + self.min_conviction_adjustment + rolling_adj)
 
     def get_effective_sl_mult(self, regime_profile: Dict) -> float:
         """Phase 4: Adaptive SL multiplier."""
@@ -1254,7 +1278,7 @@ class LiveSessionV4:
                     for t in self.stream.ticks.values()
                 )
                 if total_bsvol == 0:
-                    logger.warning("⚠️ Trade feed dead — 0 buy/sell volume. Re-subscribing...")
+                    logger.warning("[WARN] Trade feed dead — 0 buy/sell volume. Re-subscribing...")
                     try:
                         for cid in SCAN_CONTRACTS:
                             self.stream.ws.send(json.dumps({
@@ -1276,9 +1300,9 @@ class LiveSessionV4:
                     continue
                 if time.time() - self.last_trade_time < TRADE_COOLDOWN:
                     continue
-                # Circuit breaker: 3 consecutive losses → wait 5 min
+                # Circuit breaker: 3 consecutive losses → wait 30 min (Kaizen #9)
                 if self.consecutive_losses >= 3:
-                    if time.time() - self.last_trade_time < 300:
+                    if time.time() - self.last_trade_time < 1800:
                         if cycle % 20 == 0:
                             logger.warning(f"Circuit breaker: {self.consecutive_losses} consecutive losses, cooling down")
                         continue
@@ -1290,8 +1314,9 @@ class LiveSessionV4:
                     m = CONTRACT_META.get(cid, {})
                     held_assets.add(m.get("asset"))
 
-                # Phase 4: Use Kaizen-adaptive conviction threshold
-                eff_threshold = self.kaizen.get_effective_conviction_threshold(self.consecutive_losses > 0)
+                # Phase 4 + Kaizen #7: Adaptive conviction threshold (rolling win rate)
+                eff_threshold = self.kaizen.get_effective_conviction_threshold(
+                    self.consecutive_losses > 0, trades=self.trades)
 
                 for a in analyses:
                     if a["signal"] not in ("LONG", "SHORT"):
@@ -1589,15 +1614,16 @@ class LiveSessionV4:
                     unrealized = (tick.last_price - pos.entry_price) / ts * tv
                 else:
                     unrealized = (pos.entry_price - tick.last_price) / ts * tv
-                trail = " 🔒" if pos.trail_active else ""
+                trail = " [LOCK]" if pos.trail_active else ""
                 pos_str += f" | {pos.side} {meta.get('name','')} ${unrealized:+.2f}{trail}"
 
         phase, _ = get_session_phase()
-        eff_thresh = self.kaizen.get_effective_conviction_threshold(self.consecutive_losses > 0)
+        eff_thresh = self.kaizen.get_effective_conviction_threshold(
+            self.consecutive_losses > 0, trades=self.trades)
         logger.info(f"\n[{cycle}/{self.max_cycles}] msgs={self.stream.message_count} pnl=${self.session_pnl:+.2f} losses={self.consecutive_losses} phase={phase} thresh={eff_thresh}{pos_str}")
         for a in analyses[:6]:
             sig = a["signal"]
-            emoji = "🟢" if sig == "LONG" else "🔴" if sig == "SHORT" else "⚪"
+            emoji = "[LONG]" if sig == "LONG" else "[SHORT]" if sig == "SHORT" else "[--]"
             thesis_str = "; ".join(a.get("thesis", [])) if isinstance(a.get("thesis"), list) else str(a.get("thesis",""))
             logger.info(
                 f"  {emoji} {a['contract']:4s} ${a['price']:>10,.2f} | "

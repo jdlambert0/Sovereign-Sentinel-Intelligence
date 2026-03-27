@@ -1,0 +1,104 @@
+{
+  "simulation_params": {
+    "starting_balance": 148608.0,
+    "profit_target": 159000.0,
+    "trailing_drawdown": 4500.0,
+    "n_simulations": 10000,
+    "max_trading_days": 60,
+    "base_win_rate": 0.5
+  },
+  "outcomes": {
+    "probability_hit_target": 78.0,
+    "probability_hit_ruin": 0.0,
+    "probability_neither": 21.9,
+    "target_hits": 7805,
+    "ruin_hits": 0,
+    "neither": 2195
+  },
+  "balance_stats": {
+    "mean_final": 158223.03,
+    "median_final": 159023.48,
+    "std_dev": 2518.23,
+    "min_final": 148339.32,
+    "max_final": 159215.7,
+    "p5": 148533.42,
+    "p25": 159002.32,
+    "p75": 159053.9,
+    "p95": 159117.04
+  },
+  "drawdown_stats": {
+    "mean_max_drawdown": 9665.34,
+    "median_max_drawdown": 10434.78,
+    "p95_max_drawdown": 10548.4
+  },
+  "time_to_target": {
+    "mean_days": 47.4,
+    "median_days": 48,
+    "p75_days": 53
+  },
+  "trade_stats": {
+    "mean_trades_per_path": 429.0,
+    "avg_trades_per_day": 7.2
+  },
+  "contract_performance": {
+    "MNQ": {
+      "total_trades": 714919,
+      "win_rate": 0.4116564254132286,
+      "avg_win": 43.94,
+      "avg_loss": -13.12,
+      "profit_factor": 3.348308753718383
+    },
+    "MES": {
+      "total_trades": 715230,
+      "win_rate": 0.41187729821176405,
+      "avg_win": 110.07,
+      "avg_loss": -32.81,
+      "profit_factor": 3.3549808759801314
+    },
+    "MYM": {
+      "total_trades": 714573,
+      "win_rate": 0.4117242045249401,
+      "avg_win": 44.03,
+      "avg_loss": -13.12,
+      "profit_factor": 3.356163039593556
+    },
+    "M2K": {
+      "total_trades": 715321,
+      "win_rate": 0.41256862303776903,
+      "avg_win": 43.96,
+      "avg_loss": -13.13,
+      "profit_factor": 3.348861814647484
+    },
+    "MGC": {
+      "total_trades": 716438,
+      "win_rate": 0.5666812759792195,
+      "avg_win": 87.93,
+      "avg_loss": -26.16,
+      "profit_factor": 3.361055796343427
+    },
+    "MCL": {
+      "total_trades": 715036,
+      "win_rate": 0.5673616433298463,
+      "avg_win": 88.07,
+      "avg_loss": -26.15,
+      "profit_factor": 3.3684540511186167
+    }
+  },
+  "regime_performance": {
+    "trending": {
+      "total_trades": 1598203,
+      "win_rate": 0.4840761780574808,
+      "avg_pnl": 38.59
+    },
+    "ranging": {
+      "total_trades": 2134963,
+      "win_rate": 0.4532996590573232,
+      "avg_pnl": 13.87
+    },
+    "choppy": {
+      "total_trades": 558351,
+      "win_rate": 0.44498890482868303,
+      "avg_pnl": 8.73
+    }
+  }
+}
