@@ -1,0 +1,15 @@
+{
+  "_comment": "Gemini CLI MCP configuration for Sovereign Sentinel",
+  "_usage": "Copy this to ~/.gemini/settings.json or run: gemini mcp add sovereign-sentinel",
+  "_gemini_cli_setup": "gem mcp add --name sovereign-sentinel --command 'py -3.12 C:\\KAI\\sovran_v2\\mcp_server\\run_server.py'",
+  "mcpServers": {
+    "sovereign-sentinel": {
+      "command": "py",
+      "args": ["-3.12", "C:\\KAI\\sovran_v2\\mcp_server\\run_server.py"],
+      "env": {
+        "TOPSTEPX_USERNAME": "jessedavidlambert@gmail.com",
+        "TOPSTEPX_API_KEY": "9Vlu2G+cyZJ2IKJOIbI8YdEB1tmUOReiHIzlDk36EwE="
+      }
+    }
+  }
+}

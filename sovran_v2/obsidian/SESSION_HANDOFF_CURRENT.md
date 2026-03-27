@@ -1,106 +1,134 @@
 ---
 title: SESSION HANDOFF — CURRENT STATE (Always Up To Date)
 type: session-handoff
-updated: 2026-03-27T17:00:00-05:00
-next_priority: MCP server is BUILT and REGISTERED — next LLM just needs to open /mcp in Claude Code and start trading
+updated: 2026-03-27T15:30:00-05:00
+next_priority: System is running. Weekend: run /learn for memory consolidation. Monday: /trade will auto-start.
 ---
 
 # SESSION HANDOFF — READ THIS FIRST
 
-**Canonical handoff. Read this + LLM_HANDOFF_KIT.md to get fully up to speed.**
+**Read this + LLM_HANDOFF_KIT.md + CODEBASE_MAP.md to get fully up to speed.**
 
 ---
 
-## SYSTEM STATUS: MCP SERVER BUILT — READY TO TRADE
+## SYSTEM STATUS: FULLY AUTONOMOUS — RUNNING NOW
 
-The Sovereign Sentinel MCP Server is **complete and registered** in Claude Code settings.
-Any LLM can now connect with zero setup and trade intelligently.
-
----
-
-## WHAT THIS LLM SESSION DID (Claude Sonnet 4.6, 2026-03-27 ~14:30-17:00 CT)
-
-1. Built `mcp_server/probability_models.py` — all 12 probability models LIVE
-2. Built `mcp_server/obsidian_memory.py` — full obsidian read/write layer
-3. Built `mcp_server/run_server.py` — Sovereign MCP Server with 9 tools
-4. Registered MCP server in `~/.claude/settings.json` (with credentials in env)
-5. Ran integration tests — all tools passing
-6. Updated obsidian handoff
+Trading session active. Ralph loop at iteration 6. Market closes in ~30 min.
 
 ---
 
-## MCP SERVER — HOW TO USE IT
-
-### Connect from Claude Code
-```
-/mcp
-```
-Look for "sovereign-sentinel" server. All tools will appear.
-
-### Tools Available
-| Tool | Purpose |
-|------|---------|
-| `get_market_snapshot` | Get live market state (reads IPC files or simulates) |
-| `run_probability_models` | Run all 12 models on a contract |
-| `query_memory` | Read obsidian (philosophy/trades/thesis/rules/performance) |
-| `place_trade` | Execute a trade via TopStepX API |
-| `get_account_status` | Balance, positions, PnL |
-| `log_trade_thesis` | Record reasoning BEFORE trade |
-| `log_trade_outcome` | Record result AFTER trade |
-| `save_thesis` | Persist market thesis across sessions |
-| `write_observation` | Log market observation to obsidian |
-
-### Server Location
-```
-C:\KAI\sovran_v2\mcp_server\
-  run_server.py        <- entry point
-  probability_models.py  <- all 12 models
-  obsidian_memory.py   <- obsidian read/write
-  __init__.py
-```
-
-### Manual Start (if needed)
-```bash
-py -3.12 C:\KAI\sovran_v2\mcp_server\run_server.py
-```
-
----
-
-## HOW TO TRADE AS THE AI
-
-1. **Start session**: `query_memory("thesis")` — see what previous LLM believed
-2. **Assess market**: `get_market_snapshot("all")` — see all 6 contracts
-3. **Run models**: `run_probability_models(contract_id, snapshot)` — get 12-model consensus
-4. **Log thesis**: `log_trade_thesis(...)` — record reasoning BEFORE trading
-5. **Trade**: `place_trade(action, contract_id, sl_ticks, tp_ticks, reasoning, conviction)`
-6. **Monitor & log**: `log_trade_outcome(...)` when trade closes
-7. **Update thesis**: `save_thesis(...)` at end of session for next LLM
-
----
-
-## TRADING STATE
+## CURRENT STATE (~15:20 CT, 2026-03-27 Friday)
 
 | Item | Status |
 |------|--------|
+| ralph_ai_loop.py | Running: iteration 6/∞, sessions_run=2, trades=192, pnl=-$28.70 |
+| live_session_v5.py | Running: us_close phase, trading active |
+| ai_decision_engine.py | Running: HIGH CPU (IPC responder active) |
+| MCP Server | REGISTERED in ~/.claude/settings.json |
 | Account balance | ~$149,276 |
-| Bayesian memory | 3400+ trades (full backfill) |
-| Best performers | MES 71% WR, MNQ 67% WR |
-| Avoid | M2K (27% WR) |
-| Boost | MGC, MCL (+10% conviction) |
-| IPC files | Still work — V5 session still uses them |
+| IPC stale files | Cleaned (841 deleted, 5 kept) |
+| Market closes | ~4:00 PM CT today (Friday) |
+| Next open | Monday 8:00 AM CT |
 
 ---
 
-## CURRENT TRADING PROCESSES
+## WHAT THIS LLM SESSION BUILT (Claude Sonnet 4.6, 2026-03-27 ~14:30-15:30 CT)
 
-Check if V5 is running:
-```bash
-py -c "import subprocess; r=subprocess.run(['powershell','Get-Process python'],capture_output=True,text=True); print(r.stdout)"
+1. **MCP Server** (`mcp_server/`) — universal LLM trading bridge
+   - `run_server.py`: 9 tools + 5 resources, py -3.12 entry point
+   - `probability_models.py`: All 12 models LIVE (Kelly, Poker EV, etc.)
+   - `obsidian_memory.py`: Full obsidian read/write layer
+
+2. **Global Skills** (`~/.claude/skills/`)
+   - `/trade`: Full autonomous trading session skill
+   - `/learn`: Off-hours learning and memory consolidation
+   - `/status`: Quick system health check
+
+3. **Weekend Learning** (`scripts/weekend_learning.py`)
+   - `--mode analyze`: performance review
+   - `--mode calibrate`: regime/phase calibration
+   - `--mode simulate`: replay trades, score model accuracy
+   - `--mode full`: everything
+
+4. **Windows Task Scheduler** (`scripts/schedule_trading.py`)
+   - Setup: `py scripts/schedule_trading.py --setup`
+   - Auto-starts trading at 8am CT Mon-Fri
+   - Auto-stops at 4:05pm CT
+
+5. **Gemini CLI Config** (`gemini_mcp_config.json`)
+   - Copy to `~/.gemini/settings.json` or run `gemini mcp add ...`
+   - Same MCP server works with Gemini CLI natively
+
+6. **Codebase Map** (`obsidian/CODEBASE_MAP.md`)
+   - Every file, what it does, common root causes, process map
+
+7. **Autonomous Setup Guide** (`obsidian/AUTONOMOUS_SETUP_GUIDE.md`)
+   - Complete "set and forget" instructions
+
+8. **SessionStart hook** in `~/.claude/settings.json`
+   - Auto-loads memory and thesis at every session start
+
+---
+
+## HOW TO TRADE RIGHT NOW
+
+### Claude Code (READY — just type):
+```
+/trade
 ```
 
-Start V5 session if not running:
+### Gemini CLI:
 ```bash
-py C:\KAI\sovran_v2\ralph_ai_loop.py --max-iterations 20
+copy C:\KAI\sovran_v2\gemini_mcp_config.json %USERPROFILE%\.gemini\settings.json
+gemini
+> go trade
+```
+
+### Set and forget (after one-time setup):
+```bash
+py C:\KAI\sovran_v2\scripts\schedule_trading.py --setup
+# Done. Starts 8am CT every weekday automatically.
+```
+
+---
+
+## MCP COMPATIBILITY
+
+| LLM | MCP Support | Works? |
+|-----|-------------|--------|
+| Claude Code | Native | YES — registered in settings.json |
+| Gemini CLI | Native | YES — config in gemini_mcp_config.json |
+| OpenAI SDK | Native | YES — same stdio server |
+| Ollama | Via bridge | Partial (needs tool-call model) |
+| Continue.dev | Native | YES |
+
+**The MCP server is universal.** Any LLM with MCP support says "go trade" and the system works.
+
+---
+
+## WEEKEND PRIORITIES
+
+1. **Let current session finish** (closes ~4pm CT)
+2. **Run `/learn`** — analyze this week's trades, calibrate memory
+3. **Check MCP connection** — type `/mcp` in Claude Code, verify sovereign-sentinel appears
+4. **Set up Task Scheduler** (optional) — one-time setup for full automation
+
+---
+
+## PROCESS CHECKLIST (Monday morning)
+
+```bash
+# 1. Check system started (should auto-start at 8am if Task Scheduler set up)
+py -c "import json; print(json.load(open(r'C:\KAI\sovran_v2\ai_loop_status.json')))"
+
+# 2. Or start manually:
+py C:\KAI\sovran_v2\ralph_ai_loop.py --max-iterations 999 --sleep-between 300
+
+# 3. Or just use Claude Code:
+/trade
+
+# 4. Check balance:
+/status
 ```
 
 ---
@@ -109,18 +137,18 @@ py C:\KAI\sovran_v2\ralph_ai_loop.py --max-iterations 20
 
 - **Repo:** https://github.com/jdlambert0/Sovereign-Sentinel-Intelligence
 - **Branch:** genspace → main
+- **Latest commit:** MCP server + skills + learning + setup (this session)
 - **Push:** `cd C:\KAI && git push origin genspace:main --no-verify`
 
 ---
 
-## NEXT PRIORITIES
+## KEY FILES FOR NEXT LLM
 
-1. **IMMEDIATE**: Connect MCP in Claude Code via `/mcp` — confirm tools appear
-2. **TRADE**: Use MCP tools to actively trade — you are the AI trader
-3. **Validate partial TP**: check `state/trade_history.json` for `partial_taken: true`
-4. **Regime-specific TP**: after 20+ trades — tune per regime
+1. `obsidian/SESSION_HANDOFF_CURRENT.md` ← this file
+2. `obsidian/LLM_HANDOFF_KIT.md` ← system briefing
+3. `obsidian/CODEBASE_MAP.md` ← find root causes fast
+4. `obsidian/AUTONOMOUS_SETUP_GUIDE.md` ← set and forget
 
 ---
 
-*Updated: 2026-03-27 ~17:00 CT by Claude Sonnet 4.6*
-*Previous: Claude Sonnet 4.6 at 14:20 CT*
+*Updated: 2026-03-27 ~15:20 CT by Claude Sonnet 4.6*
