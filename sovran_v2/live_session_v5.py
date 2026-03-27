@@ -928,9 +928,9 @@ def analyze_market(tick: MarketTick, meta: Dict,
         conviction = 0
         signals.append(f"BLOCKED: regime {regime}")
 
-    # Phase 1: Time-of-day hard block
+    # Phase 1: Time-of-day hard block (BYPASSED for AI Decision Engine)
     ct_hour = datetime.now(timezone(timedelta(hours=-5))).hour
-    if ct_hour < TRADING_HOURS_START or ct_hour >= TRADING_HOURS_END:
+    if not USE_AI_ENGINE and (ct_hour < TRADING_HOURS_START or ct_hour >= TRADING_HOURS_END):
         conviction = 0
         signals.append(f"BLOCKED: outside trading hours ({ct_hour}h CT)")
 
