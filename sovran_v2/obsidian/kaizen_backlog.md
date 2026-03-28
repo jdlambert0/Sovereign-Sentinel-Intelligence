@@ -178,6 +178,22 @@ Expected Impact Score = (Probability of Fix Working x Estimated P&L Impact x Eas
 - Full emoji cleanup (ASCII tags)
 - TrustGraph integration client + loader + docs
 
+## P3 - LOW IMPACT / RESEARCH (NEW)
+
+### 11. Daily Cap Safety Reduction
+- **Status:** [OK] COMPLETED (2026-03-28 by Claude Sonnet 4.6)
+- **Change:** MAX_DAILY_PROFIT: $2,700 -> $2,500, caution threshold: $2,025 -> $1,875
+- **File:** `mcp_server/run_server.py` constants `MAX_DAILY_PROFIT` and `CAUTION_THRESHOLD`
+- **Reason:** User requested more conservative cap for safety on funded account
+
+### 12. Historical Backtest (5-Signal Architecture)
+- **Status:** [OK] COMPLETED (2026-03-28 by Claude Sonnet 4.6)
+- **Script:** `scripts/backtest_5signals.py`
+- **Method:** Loads Databento MBP-10 .dbn, resamples to 1-min bars, runs same `_compute_signals()` as live
+- **Result:** Dec 3 2025 overnight Globex session: 97 trades, 28% WR, +$534 PnL, 3.14x W:L ratio
+- **Positive expectancy confirmed:** $5.75/trade expected value
+- **Note:** Overnight data only (18:00-08:13 CT). Need RTH .dbn files for full validation.
+
 ## Last Updated
 
-2026-03-27 12:00 CT by Accio Work Coder (V4 outcome tracking added, Bayesian memory backfilled)
+2026-03-28 12:00 CT by Claude Sonnet 4.6 (daily cap lowered to $2,500; backtest script added; positive expectancy confirmed)

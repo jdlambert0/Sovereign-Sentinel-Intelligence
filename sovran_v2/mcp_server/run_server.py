@@ -759,7 +759,7 @@ def _calculate_position_size(conviction: str, account_balance: float,
         platform_max = 2
 
     # Approaching daily cap → cap at 1 contract regardless of conviction
-    if daily_pnl >= 2700 * 0.75:  # $2,025
+    if daily_pnl >= 2500 * 0.75:  # $1,875
         platform_max = min(platform_max, 1)
 
     conviction_fraction = {"HIGH": 1.0, "MEDIUM": 0.5, "LOW": 0.25}.get(conviction, 0.0)
@@ -1002,8 +1002,8 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
 
     # TopStep Consistency Rule check (max $2,700/day on $150K/9K target)
     daily_pnl = _get_daily_pnl_from_memory()
-    MAX_DAILY_PROFIT = 2700.0
-    CAUTION_THRESHOLD = MAX_DAILY_PROFIT * 0.75  # $2,025
+    MAX_DAILY_PROFIT = 2500.0
+    CAUTION_THRESHOLD = MAX_DAILY_PROFIT * 0.75  # $1,875
     if daily_pnl >= MAX_DAILY_PROFIT:
         return {
             "action": "NO_TRADE",
