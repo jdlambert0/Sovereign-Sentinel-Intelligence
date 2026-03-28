@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sovereign Sentinel Intelligence — MCP Server
+Sovereign Sentinel Intelligence  -  MCP Server
 =============================================
 Any LLM with MCP support connects with one command:
   py -3.12 C:\\KAI\\sovran_v2\\mcp_server\\run_server.py
@@ -229,7 +229,7 @@ async def list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="log_trade_thesis",
-            description="Record your reasoning BEFORE placing a trade. This is mandatory for every trade — logged to obsidian for cross-session learning.",
+            description="Record your reasoning BEFORE placing a trade. This is mandatory for every trade  -  logged to obsidian for cross-session learning.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -401,7 +401,7 @@ async def _get_market_snapshot(contract_id: str = "all") -> Dict[str, Any]:
     request_files = sorted(IPC_DIR.glob("request_*.json"), key=lambda p: p.stat().st_mtime)
 
     if not request_files:
-        # No IPC files — return simulated snapshot for testing
+        # No IPC files  -  return simulated snapshot for testing
         return _simulated_snapshot(contract_id)
 
     # Get most recent request(s)
@@ -486,7 +486,7 @@ async def _place_trade(args: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(f"TRADE REQUEST: {action} {contract_id} SL={sl_ticks} TP={tp_ticks} conviction={conviction}")
 
     if not CREDS["username"] or not CREDS["api_key"]:
-        return {"error": "No credentials — cannot place trade",
+        return {"error": "No credentials  -  cannot place trade",
                 "hint": "Set credentials in C:\\KAI\\sovran_v2_secrets\\credentials.env"}
 
     # Safety checks
@@ -540,7 +540,7 @@ def _compute_signals(snap: dict) -> dict:
     """
     Compute 5 clean signals from an enriched market snapshot.
     Returns a dict with labeled signal strings and direction/conviction per signal.
-    Replaces run_all_models() — only OFI/VPIN has proven signal; others add context.
+    Replaces run_all_models()  -  only OFI/VPIN has proven signal; others add context.
     """
     ofi_z = snap.get("ofi_z", 0.0)
     vpin = snap.get("vpin", 0.5)
@@ -552,21 +552,21 @@ def _compute_signals(snap: dict) -> dict:
     low_sess = snap.get("low_of_session", price)
     prices_history = snap.get("prices_history", [price])
 
-    # --- Signal 1: Order Flow (OFI + VPIN) — primary oracle ---
+    # --- Signal 1: Order Flow (OFI + VPIN)  -  primary oracle ---
     if ofi_z > 1.5 and vpin > 0.60:
-        of_label = f"STRONG BULLISH (OFI {ofi_z:+.1f}σ, VPIN {vpin:.2f} — informed buying confirmed)"
+        of_label = f"STRONG BULLISH (OFI {ofi_z:+.1f}s, VPIN {vpin:.2f}  -  informed buying confirmed)"
         of_dir, of_conv = "LONG", min(90, 60 + int(abs(ofi_z) * 10))
     elif ofi_z > 0.8:
-        of_label = f"MILD BULLISH (OFI {ofi_z:+.1f}σ — buy pressure building)"
+        of_label = f"MILD BULLISH (OFI {ofi_z:+.1f}s  -  buy pressure building)"
         of_dir, of_conv = "LONG", int(50 + abs(ofi_z) * 8)
     elif ofi_z < -1.5 and vpin > 0.60:
-        of_label = f"STRONG BEARISH (OFI {ofi_z:+.1f}σ, VPIN {vpin:.2f} — informed selling confirmed)"
+        of_label = f"STRONG BEARISH (OFI {ofi_z:+.1f}s, VPIN {vpin:.2f}  -  informed selling confirmed)"
         of_dir, of_conv = "SHORT", min(90, 60 + int(abs(ofi_z) * 10))
     elif ofi_z < -0.8:
-        of_label = f"MILD BEARISH (OFI {ofi_z:+.1f}σ — sell pressure building)"
+        of_label = f"MILD BEARISH (OFI {ofi_z:+.1f}s  -  sell pressure building)"
         of_dir, of_conv = "SHORT", int(50 + abs(ofi_z) * 8)
     else:
-        of_label = f"NEUTRAL (OFI {ofi_z:+.1f}σ — no informed flow detected)"
+        of_label = f"NEUTRAL (OFI {ofi_z:+.1f}s  -  no informed flow detected)"
         of_dir, of_conv = "NEUTRAL", 25
 
     # --- Signal 2: Price Structure (VWAP + session range) ---
@@ -581,10 +581,10 @@ def _compute_signals(snap: dict) -> dict:
             ps_label = f"BELOW VWAP {vwap_dev_pct:.2f}% (bearish structure, {range_pct:.0f}% of session range)"
             ps_dir = "SHORT"
         else:
-            ps_label = f"AT VWAP (+-{abs(vwap_dev_pct):.2f}%, {range_pct:.0f}% of session range — balanced)"
+            ps_label = f"AT VWAP (+-{abs(vwap_dev_pct):.2f}%, {range_pct:.0f}% of session range  -  balanced)"
             ps_dir = "NEUTRAL"
     else:
-        ps_label = f"VWAP unavailable — session range {range_pct:.0f}% consumed (H:{high_sess:.1f} L:{low_sess:.1f})"
+        ps_label = f"VWAP unavailable  -  session range {range_pct:.0f}% consumed (H:{high_sess:.1f} L:{low_sess:.1f})"
         ps_dir = "NEUTRAL"
 
     # --- Signal 3: Momentum (from prices_history rolling buffer) ---
@@ -599,7 +599,7 @@ def _compute_signals(snap: dict) -> dict:
             mom_label = f"DOWNWARD MOMENTUM ({roc:+.3f}%, {4-up_bars}/4 bars down)"
             mom_dir = "SHORT"
         else:
-            mom_label = f"FLAT/MIXED ({roc:+.3f}%, {up_bars}/4 bars up — choppy)"
+            mom_label = f"FLAT/MIXED ({roc:+.3f}%, {up_bars}/4 bars up  -  choppy)"
             mom_dir = "NEUTRAL"
     else:
         mom_label = "UNAVAILABLE (live_session must run >5 bars before momentum is valid)"
@@ -608,10 +608,10 @@ def _compute_signals(snap: dict) -> dict:
     # --- Signal 4: Volatility Regime ---
     vol_ratio = atr / avg_atr if avg_atr > 0.01 else 1.0
     if vol_ratio > 1.5:
-        vol_label = f"HIGH ({atr:.1f}t vs {avg_atr:.1f}t avg = {vol_ratio:.1f}x) — widen stops, reduce size"
+        vol_label = f"HIGH ({atr:.1f}t vs {avg_atr:.1f}t avg = {vol_ratio:.1f}x)  -  widen stops, reduce size"
         vol_regime = "high"
     elif vol_ratio < 0.7:
-        vol_label = f"LOW ({atr:.1f}t vs {avg_atr:.1f}t avg = {vol_ratio:.1f}x) — tighter spreads, normal size"
+        vol_label = f"LOW ({atr:.1f}t vs {avg_atr:.1f}t avg = {vol_ratio:.1f}x)  -  tighter spreads, normal size"
         vol_regime = "low"
     else:
         vol_label = f"NORMAL ({atr:.1f}t vs {avg_atr:.1f}t avg)"
@@ -621,16 +621,16 @@ def _compute_signals(snap: dict) -> dict:
     now_ct = datetime.now(timezone(timedelta(hours=-5)))
     ct_mins = now_ct.hour * 60 + now_ct.minute
     if 510 <= ct_mins < 525:
-        sess_label = "ORB WINDOW (8:30-8:45 CT) — establishing range, await breakout confirmation"
+        sess_label = "ORB WINDOW (8:30-8:45 CT)  -  establishing range, await breakout confirmation"
         sess_ctx = "orb_window"
     elif 525 <= ct_mins < 600:
-        sess_label = "POWER HOUR (8:45-10:00 CT) — highest probability setups, full aggression"
+        sess_label = "POWER HOUR (8:45-10:00 CT)  -  highest probability setups, full aggression"
         sess_ctx = "power_hour"
     elif 600 <= ct_mins < 840:
-        sess_label = "MID-SESSION (10:00 AM-2:00 PM CT) — mean reversion favored"
+        sess_label = "MID-SESSION (10:00 AM-2:00 PM CT)  -  mean reversion favored"
         sess_ctx = "mid_session"
     elif 840 <= ct_mins < 935:
-        sess_label = "PRE-CLOSE (2:00-3:55 PM CT) — watch for late squeezes"
+        sess_label = "PRE-CLOSE (2:00-3:55 PM CT)  -  watch for late squeezes"
         sess_ctx = "pre_close"
     else:
         sess_label = f"OUTSIDE HOURS ({now_ct.strftime('%H:%M')} CT)"
@@ -677,7 +677,7 @@ def _build_hunt_context(snap: dict, signals: dict, memory: dict,
     header = (
         "You are an expert intraday futures trader with deep knowledge of order flow and market "
         "microstructure. Analyze this market snapshot and decide: LONG, SHORT, or a LOW-conviction "
-        "probe trade. Never idle — always find the best available setup."
+        "probe trade. Never idle  -  always find the best available setup."
     )
     footer = (
         "You are an expert intraday futures trader with deep knowledge of order flow and market "
@@ -688,7 +688,7 @@ def _build_hunt_context(snap: dict, signals: dict, memory: dict,
 
     return f"""{header}
 
-MARKET SNAPSHOT — {contract} @ {price:.2f}  [{datetime.now().strftime('%H:%M CT')}]
+MARKET SNAPSHOT  -  {contract} @ {price:.2f}  [{datetime.now().strftime('%H:%M CT')}]
 ===============================================================
 
 ORDER FLOW (PRIMARY SIGNAL):
@@ -706,13 +706,13 @@ VOLATILITY REGIME:
 SESSION CONTEXT:
   {signals['sess_label']}
 
-SUGGESTED TRADE PARAMETERS (Python math — LLM may adjust):
+SUGGESTED TRADE PARAMETERS (Python math  -  LLM may adjust):
   Stop: {sl_ticks} ticks (${risk_per_contract:.0f}/contract)
   Target: {tp_ticks} ticks (${reward_per_contract:.0f}/contract)
   R:R = 1:{tp_ticks/sl_ticks:.1f}
 
 ACCOUNT CONTEXT:
-  Daily PnL today: ${daily_pnl:+.0f} (cap: $2,700 — DO NOT exceed)
+  Daily PnL today: ${daily_pnl:+.0f} (cap: $2,700  -  DO NOT exceed)
   Historical: {hist_summary}
 
 OTHER CONTRACTS (ranked by conviction):
@@ -748,7 +748,7 @@ def _calculate_position_size(conviction: str, account_balance: float,
     if conviction_fraction == 0.0:
         return 0
 
-    raw = max(1, round(platform_max * conviction_fraction))
+    raw = max(1, int(platform_max * conviction_fraction + 0.5))  # +0.5 avoids banker's rounding (e.g. 2.5 -> 3 not 2)
     return min(raw, platform_max)
 
 
@@ -767,7 +767,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
     dry_run = args.get("dry_run", False)
 
     # ── Step 1: Kill ai_decision_engine (NOT live_session) ──────────────────
-    # live_session_v5 must keep running — it is the OFI/VPIN data provider.
+    # live_session_v5 must keep running  -  it is the OFI/VPIN data provider.
     # We only kill ai_decision_engine.py so the LLM (us) can be the brain.
     # live_session will continue writing IPC request files; we respond to them.
     session_mode = "direct"
@@ -783,7 +783,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             subprocess.run(["taskkill", "/PID", str(pid), "/F"],
                            capture_output=True, timeout=5)
             engine_pid_file.unlink(missing_ok=True)
-            logger.info(f"Killed ai_decision_engine (PID {pid}) — LLM is now the brain")
+            logger.info(f"Killed ai_decision_engine (PID {pid})  -  LLM is now the brain")
         except Exception as e:
             logger.warning(f"Could not kill ai_decision_engine: {e} (may not be running)")
 
@@ -806,10 +806,10 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
     if not fresh_ipc:
         if pid_file.exists():
             session_mode = "live_session_no_data"
-            logger.warning("live_session running but no fresh IPC data — OFI/VPIN will be cold")
+            logger.warning("live_session running but no fresh IPC data  -  OFI/VPIN will be cold")
         else:
             session_mode = "direct_cold"
-            logger.warning("live_session not running — start it for live OFI/VPIN data")
+            logger.warning("live_session not running  -  start it for live OFI/VPIN data")
 
     # ── Step 2: Get market snapshot for all contracts ───────────────────────
     # If we have a live IPC snapshot, inject its OFI/VPIN into the market data
@@ -897,7 +897,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
     if daily_pnl >= MAX_DAILY_PROFIT:
         return {
             "action": "NO_TRADE",
-            "reason": f"Daily profit cap reached: ${daily_pnl:.2f} >= ${MAX_DAILY_PROFIT:.0f}. STOP for today — TopStep consistency rule.",
+            "reason": f"Daily profit cap reached: ${daily_pnl:.2f} >= ${MAX_DAILY_PROFIT:.0f}. STOP for today  -  TopStep consistency rule.",
             "daily_pnl": daily_pnl,
             "all_scanned": all_results
         }
@@ -914,10 +914,10 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             "best_conviction": best["conviction"]
         }
 
-    # Build semantic context (always — returned in both dry_run and low-conviction responses)
+    # Build semantic context (always  -  returned in both dry_run and low-conviction responses)
     semantic_context = _build_hunt_context(
         best["snap"], best["signals"], memory, all_results, daily_pnl
-    ) if best.get("snap") else "No best contract found — all signals neutral."
+    ) if best.get("snap") else "No best contract found  -  all signals neutral."
 
     # Pre-compute suggested stops for dry_run response
     best_atr = best["snap"].get("atr_ticks", 12.0) if best.get("snap") else 12.0
@@ -936,7 +936,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             "session_mode": session_mode,
             "daily_pnl": daily_pnl,
             "semantic_context": semantic_context,
-            "advice": "Conviction below threshold — but LLM may override using semantic_context above."
+            "advice": "Conviction below threshold  -  but LLM may override using semantic_context above."
         }
 
     if dry_run:
@@ -951,7 +951,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             "all_scanned": all_results,
             "session_mode": session_mode,
             "daily_pnl": daily_pnl,
-            "note": "dry_run=True — LLM should reason about semantic_context and call place_trade if confirmed"
+            "note": "dry_run=True  -  LLM should reason about semantic_context and call place_trade if confirmed"
         }
 
     # ── Step 5: Place the trade ─────────────────────────────────────────────
@@ -1071,7 +1071,7 @@ def _cached_account_status(error: str = "") -> Dict[str, Any]:
         "estimated_balance": 149276.0,  # last known from handoff
         "trades_executed": memory.get("trades_executed", 0),
         "total_pnl": memory.get("total_pnl", 0),
-        "note": "Real-time data unavailable — using cached state"
+        "note": "Real-time data unavailable  -  using cached state"
     }
 
 
@@ -1098,7 +1098,7 @@ def _simulated_snapshot(contract_id: str) -> Dict[str, Any]:
         "account_balance": 149276.0,
         "open_positions": 0,
         "_source": "simulated",
-        "_note": "No IPC files found — this is a cold-start or test snapshot"
+        "_note": "No IPC files found  -  this is a cold-start or test snapshot"
     }
 
 
@@ -1200,7 +1200,7 @@ async def main():
     if not thesis.get("_stale"):
         logger.info(f"Current thesis: {thesis.get('thesis', '')[:100]}")
     else:
-        logger.info("No current thesis — AI should call save_thesis after first assessment")
+        logger.info("No current thesis  -  AI should call save_thesis after first assessment")
 
     # Run server via stdio transport (LLM connects via stdin/stdout)
     async with stdio_server() as streams:
