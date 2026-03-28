@@ -77,12 +77,20 @@ The 12-model voting system was replaced. Only Model 8 (OFI/VPIN) had a real sign
 
 Added `prices_history: List[float]` to `MarketSnapshot`. `_build_snapshot()` passes last 20 bar closes. `decision.py` writes it to IPC. MCP enrichment copies it to each snap. All 5 signals are now live.
 
-### All 5 RETHINK items are complete. Next: Run Verification Tests
+### All 5 RETHINK items complete. Offline tests PASSED.
 
-1. **VWAP in IPC**: Start live_session, check `ipc/request_*.json` → does `snapshot_data.vwap` exist?
-2. **Dry run labels**: Call `hunt_and_trade(dry_run=True)` → does `semantic_context` look correct?
-3. **Full adversarial flow**: Say "hunt" → does Claude output BEAR/BULL/SYNTHESIS/DECISION/THESIS?
-4. **Daily cap**: Manually set daily pnl=2800 in trade_history.json, call hunt → should get NO_TRADE
+| Test | Result |
+|------|--------|
+| `_compute_signals()` bullish snap | PASS - STRONG BULLISH, ABOVE VWAP, UPWARD MOMENTUM 4/4 bars |
+| `_compute_signals()` neutral/empty | PASS - NEUTRAL + momentum UNAVAILABLE (correct until bars accumulate) |
+| `_calculate_position_size()` all tiers | PASS - correct across +$500/+$1600/+$2000 gain, caution mode |
+| `_build_hunt_context()` output | PASS - readable English, doubled-text, correct R:R and tick value |
+| Daily cap logic | PASS - $2800 > $2700 correctly blocks trade |
+| Bug fixed | MEDIUM rounding: int(x+0.5) vs Python banker's rounding (2.5->3, not 2) |
+
+**Remaining live test (Monday 8am CT):**
+- Start live_session, check IPC file for `vwap` + `prices_history` list
+- Say "hunt" and verify full BEAR/BULL/SYNTHESIS/THESIS adversarial flow fires
 
 ---
 
