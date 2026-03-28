@@ -1,7 +1,7 @@
 ---
 title: Sovereign Sentinel V2 — Complete Codebase Map
 type: codebase-reference
-updated: 2026-03-27
+updated: 2026-03-27 (evening — LLM-as-brain architecture)
 purpose: Find root causes fast. Every file, what it does, when to touch it.
 ---
 
@@ -125,12 +125,23 @@ C:\KAI\sovran_v2\
 | `ipc/record_trade_outcome.py` | Records outcomes | Memory not updating → check this |
 | `backfill_outcomes.py` | Backfill memory from logs | Use when memory was reset |
 
-### PROBABILITY MODELS
+### SIGNAL COMPUTATION (NEW ARCHITECTURE — 2026-03-27)
 
-| File | Location | What it calculates |
+| File | Location | What it does |
 |------|---------|--------------|
-| `mcp_server/probability_models.py` | All 12 models | Kelly, Poker EV, Casino Edge, Market Making, Stat Arb, Volatility, Momentum, Order Flow, Bayesian, Monte Carlo, Risk of Ruin, Information Theory |
-| Key function | `run_all_models(snapshot, memory)` | Returns `{models: {...}, summary: {long_votes, short_votes, dominant_signal}}` |
+| `mcp_server/run_server.py:_compute_signals()` | 5 clean signals | Order Flow (OFI+VPIN), Price Structure (VWAP), Momentum (prices_history), Volatility Regime (ATR ratio), Session Context (time-of-day) |
+| `mcp_server/run_server.py:_build_hunt_context()` | Semantic English packet | Translates signals to English labels for LLM. Uses doubled-text (role+task at top AND bottom of context). |
+| `mcp_server/run_server.py:_calculate_position_size()` | Contract sizing | TopStepX tiers: +$1500→3 contracts, +$2000→5 contracts. HIGH=max, MEDIUM=half, LOW=1 probe. |
+| `mcp_server/probability_models.py` | UTILITY LIBRARY ONLY | Individual model functions available. `run_all_models()` is NO LONGER CALLED by hunt_and_trade. 8/12 models were broken or correlated. |
+
+**Hunt flow (2-step skill):**
+```
+hunt_and_trade(dry_run=True) → semantic_context
+  ↓ LLM reasons: BEAR CASE / BULL CASE / SYNTHESIS / DECISION / CONVICTION / THESIS
+  ↓ LLM calls place_trade() with conviction level
+  → trade placed
+```
+The calling LLM IS the brain. hunt_and_trade is the data collector + context builder.
 
 ---
 
@@ -237,10 +248,20 @@ ZOMBIE TO KILL:
 - Response: `ipc/response_{timestamp}.json` — trade decision
 - Fields: `{action, conviction, sl_ticks, tp_ticks, kelly_fraction, reasoning, ev}`
 
-### MCP Tools (V3)
+### MCP Tools (V3 — updated 2026-03-27)
 - Server: `py -3.12 mcp_server/run_server.py`
 - Config: `~/.claude/settings.json` (registered as `sovereign-sentinel`)
-- Tools: get_market_snapshot, run_probability_models, query_memory, place_trade, get_account_status, log_trade_thesis, log_trade_outcome, save_thesis, write_observation
+- Tools: get_market_snapshot, hunt_and_trade (dry_run=True for 2-step flow), query_memory, place_trade, get_account_status, log_trade_thesis, log_trade_outcome, save_thesis, write_observation
+- NOTE: `run_probability_models` still exists but `hunt_and_trade` no longer calls `run_all_models()` internally. Use `hunt_and_trade(dry_run=True)` to get `semantic_context` for LLM reasoning.
+
+**VWAP data flow:**
+```
+live_session_v5.py MarketTick._vwap_cum_pv/vol
+  → _build_snapshot() → MarketSnapshot.vwap (field added 2026-03-27)
+  → IPC request file snapshot_data.vwap
+  → hunt_and_trade IPC enrichment → snap["vwap"]
+  → _compute_signals() Signal 2 (Price Structure)
+```
 
 ---
 

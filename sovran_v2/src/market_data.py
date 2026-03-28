@@ -119,6 +119,9 @@ class MarketSnapshot:
     low_of_session: float
     price_change_pct: float   # Price change % over the buffer window
 
+    # Session VWAP (Volume-Weighted Average Price — resets each session)
+    vwap: float = 0.0         # 0.0 until first trade tick accumulates volume
+
     # L2 Depth (populated when GatewayDepth data is flowing)
     l2_bid_levels: List[DepthLevel] = field(default_factory=list)
     l2_ask_levels: List[DepthLevel] = field(default_factory=list)

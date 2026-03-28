@@ -1,8 +1,8 @@
 ---
 title: SESSION HANDOFF — CURRENT STATE (Always Up To Date)
 type: session-handoff
-updated: 2026-03-27T16:00:00-05:00
-next_priority: Monday 8am CT — run /trade (markets open). Weekend — run /learn.
+updated: 2026-03-27T23:45:00-05:00
+next_priority: Monday 8am CT — run `py scripts/llm_as_brain.py` then say "hunt"
 ---
 
 # SESSION HANDOFF — READ THIS FIRST
@@ -17,118 +17,129 @@ Last session closed at ~4pm CT Friday 2026-03-27. Next open: Monday 8:00 AM CT.
 
 ---
 
-## CURRENT STATE (as of 2026-03-27 ~16:00 CT)
+## CURRENT STATE (as of 2026-03-27 ~23:45 CT)
 
 | Item | Status |
 |------|--------|
 | Account balance | $149,150.80 |
 | Open positions | 0 (clean) |
-| Last session trades | 17 trades, +$223.40 PnL (live_session_v5, M2K short filled) |
-| Ralph loop | Stopped (session complete iteration 6) |
+| Live trades logged | 89 total (3 days) |
+| Live PnL | +$337.43 (50% win rate, positive expectancy — winners 2.5x losers) |
 | MCP Server | Registered in ~/.claude/settings.json as sovereign-sentinel |
 | GitHub | https://github.com/jdlambert0/Sovereign-Sentinel-Intelligence (branch: main) |
-| Pre-commit hooks | REMOVED (were broken — ran SAE5.8 tests on all KAI commits) |
-| bypassPermissions | FIXED — added to worktree settings.local.json (restart required) |
+| Architecture | **LLM-as-brain (NEW)** — 2-step hunt: dry_run → LLM reasons → place_trade |
 
 ---
 
-## WHAT WAS BUILT THIS SESSION (Claude Sonnet 4.6, 2026-03-27 ~14:30–16:00 CT)
+## WHAT WAS BUILT THIS SESSION (Claude Sonnet 4.6, 2026-03-27 evening)
 
-### MCP Server (`mcp_server/`)
-- `run_server.py` — 10 tools + 5 resources
-- **NEW: `hunt_and_trade` tool** — one-call autonomous trading (replaces 9-step manual flow)
-  - Stops running session to take connection
-  - Scans all 6 contracts
-  - Runs all 12 probability models
-  - Places trade if conviction >= threshold
-  - Returns full audit trail
-- `probability_models.py` — all 12 models live
-- `obsidian_memory.py` — obsidian read/write layer
+### Architecture: Hunt V2 — LLM is the Brain
 
-### Skills (global, any project)
-- `/trade` — simplified to one call: `hunt_and_trade(conviction_threshold=65)`
-- `/learn` — off-hours learning and memory consolidation
-- `/status` — quick health check
+The 12-model voting system was replaced. Only Model 8 (OFI/VPIN) had a real signal.
+8/12 were broken, correlated, or fabricating inputs. Now we have:
 
-### Automation
-- `scripts/schedule_trading.py --setup` — Windows Task Scheduler (8am/4pm CT)
-- `scripts/weekend_learning.py --mode full` — off-hours learning
+**5 clean Python signals → semantic English → LLM adversarial reasoning → deterministic contract sizing**
 
-### Docs
-- `obsidian/CODEBASE_MAP.md` — every file, root causes, process map
-- `obsidian/HOW_LLM_ACTUALLY_TRADES.md` — honest architecture (read this)
-- `obsidian/AUTONOMOUS_SETUP_GUIDE.md` — set and forget guide
-- `obsidian/BUG_LOG_27Mar2026.md` — full bug log from live hunt session
+### New Functions in `mcp_server/run_server.py`
 
----
+| Function | Purpose |
+|----------|---------|
+| `_compute_signals(snap)` | 5-signal engine: Order Flow, Price Structure (VWAP), Momentum, Volatility Regime, Session Context |
+| `_build_hunt_context(...)` | Semantic English packet for LLM — doubled-text (role at top AND bottom) |
+| `_calculate_position_size(...)` | TopStepX tier scaling: +$1500→3, +$2000→5 contracts |
 
-## BUGS FOUND TODAY (live hunt, ~3:55 CT)
+### Updated Files
 
-| Bug | Status | Fix |
-|-----|--------|-----|
-| hunt_and_trade used consensus_strength (0-1) vs threshold 65 (0-100) — never traded | FIXED | Now uses informed_conv * consensus blend |
-| BrokerClient.place_bracket_order doesn't exist | FIXED | Use place_market_order |
-| Bars API errorCode=1 all contracts | UNRESOLVED | Workaround: use trade history for price |
-| OFI/VPIN = 0 without running session | ARCHITECTURE GAP | See permanent fix plan below |
-| MNQ stops trading ~3:55 CT (before 4pm) | KNOWN | Hunt loop should stop at 3:55 |
+| File | Change |
+|------|--------|
+| `mcp_server/run_server.py` | Replaced `run_all_models()` with 5-signal system; dry_run now returns `semantic_context`; Step 5 uses `_calculate_position_size()` |
+| `src/market_data.py` | Added `vwap: float = 0.0` field to MarketSnapshot |
+| `live_session_v5.py` | Passes `tick.vwap` in `_build_snapshot()` |
+| `skills/trade/SKILL.md` | Full rewrite: 2-step flow (dry_run → reason → place_trade), adversarial framing, TopStepX sizing rules |
+| `obsidian/CODEBASE_MAP.md` | Updated signal architecture, 2-step flow diagram, VWAP data flow |
+| `obsidian/kaizen_backlog.md` | RETHINK-1 through RETHINK-4 marked COMPLETED |
 
-Full details: `obsidian/BUG_LOG_27Mar2026.md`
+### What Kaizen Items Are Done
+
+| # | Item | Status |
+|---|------|--------|
+| RETHINK-1 | Replace 12 broken models with 5 real signals | [OK] COMPLETED |
+| RETHINK-2 | Adversarial bull/bear framing in SKILL.md | [OK] COMPLETED |
+| RETHINK-3 | Conviction-based contract scaling (TopStepX tiers) | [OK] COMPLETED |
+| RETHINK-4 | Semantic context packet (Python → English) with doubled-text | [OK] COMPLETED |
+| RETHINK-5 | Fix prices_history → 20-bar rolling buffer | [TODO] NEXT |
 
 ---
 
-## ARCHITECTURE GAP — CRITICAL FOR MONDAY
+## WHAT IS STILL OPEN (NEXT SESSION PRIORITY)
 
-**The problem:** `hunt_and_trade` stops `live_session_v5` to avoid connection conflict.
-But live_session IS the OFI/VPIN provider. Killing it kills the data.
+### RETHINK-5: 20-bar prices_history rolling buffer (HIGH PRIORITY — do before Monday)
 
-**The correct architecture (to implement Monday):**
+**Problem:** `live_session_v5.py` currently writes `prices_history = [price]` — a single point.
+The `_compute_signals()` momentum engine needs ≥5 prices to activate. Without this,
+Signal 3 (Momentum) always returns "UNAVAILABLE" — one of 5 signals is dead.
+
+**Fix needed in `live_session_v5.py`:**
+- Add a `deque(maxlen=20)` rolling buffer
+- Append close price every bar
+- Write full list to IPC snapshot
+
+**Impact:** Activates momentum signal. OFI + VWAP + momentum all aligning = highest-conviction trades.
+
+### Then: Run Verification Tests
+
+1. **VWAP in IPC**: Start live_session, check `ipc/request_*.json` → does `snapshot_data.vwap` exist?
+2. **Dry run labels**: Call `hunt_and_trade(dry_run=True)` → does `semantic_context` look correct?
+3. **Full adversarial flow**: Say "hunt" → does Claude output BEAR/BULL/SYNTHESIS/DECISION/THESIS?
+4. **Daily cap**: Manually set daily pnl=2800 in trade_history.json, call hunt → should get NO_TRADE
+
+---
+
+## THE NEW HUNT FLOW (2-STEP)
+
 ```
-live_session_v5 runs → writes IPC request files (market snapshot + OFI/VPIN)
-                     → does NOT run ai_decision_engine (kill that)
-LLM reads IPC request files → runs 12 models → writes IPC response
-live_session_v5 picks up IPC response → executes the trade
-```
-This means:
-1. No connection conflict (live_session holds the connection)
-2. Full OFI/VPIN data available to models
-3. LLM is the actual brain, Python is the execution layer
+Old: hunt_and_trade(dry_run=False) → Python math votes → trade placed
 
-**What to build Monday:**
-- `scripts/lm_as_brain.py` — kills ai_decision_engine, starts live_session, lets LLM handle IPC responses
-- Update `hunt_and_trade` to NOT kill live_session, instead write IPC response files
+New: hunt_and_trade(dry_run=True) → semantic_context
+       ↓ LLM reads: BEAR CASE / BULL CASE / SYNTHESIS / DECISION / CONVICTION
+       ↓ LLM calls place_trade(conviction=HIGH→85 / MEDIUM→70 / LOW→55, contracts=2-5)
+       → trade placed
+```
+
+**The calling LLM IS the brain.** hunt_and_trade is now data collection + context building only.
 
 ---
 
 ## HOW TO TRADE MONDAY
 
+**Step 1** — Start the system (once per session):
 ```
-/trade
-```
-
-Or explicitly:
-```
-mcp__sovereign-sentinel__hunt_and_trade
-  conviction_threshold: 65
+py -3.12 scripts/llm_as_brain.py
 ```
 
-Loop every 3-5 minutes from 8am–3:55pm CT.
+**Step 2** — Then just say:
+```
+hunt
+```
+
+The SKILL.md skill fires automatically. It will:
+1. Call `hunt_and_trade(dry_run=True)` to get `semantic_context`
+2. Reason: BEAR CASE → BULL CASE → SYNTHESIS → DECISION → CONVICTION → THESIS
+3. Call `place_trade(...)` with conviction level and correct contract count
+4. Loop every 3–5 min until 3:55 PM CT
 
 ---
 
-## HOW TO RESUME AFTER RESTART
+## ARCHITECTURE (CURRENT — CORRECT)
 
-Open Claude Code in `C:\KAI\sovran_v2`, say:
 ```
-read obsidian/SESSION_HANDOFF_CURRENT.md and obsidian/CODEBASE_MAP.md then continue where we left off
+live_session_v5 runs → writes ipc/request_*.json (market snapshot + OFI/VPIN + VWAP)
+LLM (Claude/Gemini) calls hunt_and_trade(dry_run=True) → gets semantic English context
+LLM reasons adversarially → outputs conviction + thesis
+LLM calls place_trade() → trade executed with 2-5 contracts
 ```
 
----
-
-## WEEKEND TASKS
-
-1. **Run `/learn`** — analyze this week's 192 trades, calibrate memory
-2. **Check MCP** — type `/mcp` to verify sovereign-sentinel is registered
-3. **Optional: Task Scheduler** — `py scripts/schedule_trading.py --setup` for full automation
+**Never kill live_session_v5. It is the OFI/VPIN/VWAP data source.**
 
 ---
 
@@ -136,8 +147,10 @@ read obsidian/SESSION_HANDOFF_CURRENT.md and obsidian/CODEBASE_MAP.md then conti
 
 1. `obsidian/SESSION_HANDOFF_CURRENT.md` ← this file
 2. `obsidian/CODEBASE_MAP.md` ← find root causes fast
-3. `obsidian/HOW_LLM_ACTUALLY_TRADES.md` ← understand the real architecture
-4. `obsidian/BUG_LOG_27Mar2026.md` ← today's bugs
+3. `mcp_server/run_server.py` ← main MCP server (3 new functions here)
+4. `skills/trade/SKILL.md` ← the hunt skill (updated for 2-step flow)
+5. `obsidian/kaizen_backlog.md` ← improvement queue
+6. `obsidian/HUNT_RETHINK_27Mar2026.md` ← architecture decision doc
 
 ---
 
@@ -145,8 +158,7 @@ read obsidian/SESSION_HANDOFF_CURRENT.md and obsidian/CODEBASE_MAP.md then conti
 
 - Repo: https://github.com/jdlambert0/Sovereign-Sentinel-Intelligence
 - Branch: genspace → main
-- Latest: `c3f6b140` — live hunt bugs, obsidian gitignore fix, problem tracker updated
 
 ---
 
-*Updated: 2026-03-27 ~16:00 CT by Claude Sonnet 4.6*
+*Updated: 2026-03-27 ~23:45 CT by Claude Sonnet 4.6*

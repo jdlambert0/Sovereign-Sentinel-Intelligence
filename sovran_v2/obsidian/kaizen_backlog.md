@@ -43,6 +43,66 @@ Expected Impact Score = (Probability of Fix Working x Estimated P&L Impact x Eas
 - **Status:** [OK] COMPLETED (2026-03-27 by Viktor AI)
 - **Implementation:** Hard block in ai_decision_engine.py make_decision(), 8am-4pm CT only
 
+## P0 - CRITICAL (NEW — Hunt Rethink Architecture 2026-03-27 evening)
+
+### RETHINK-1. Replace 12 Broken/Correlated Models with 5 Real Signals + LLM Reasoning
+- **Status:** [OK] COMPLETED (2026-03-27 evening by Claude Sonnet 4.6)
+- **Result:** `_compute_signals()` in run_server.py replaces `run_all_models()`. 5 signals: Order Flow (OFI+VPIN), Price Structure (VWAP), Momentum, Volatility Regime, Session Context.
+
+### RETHINK-2. Adversarial Bull/Bear Framing in LLM Prompt
+- **Status:** [OK] COMPLETED (2026-03-27 evening by Claude Sonnet 4.6)
+- **Result:** SKILL.md Step 3 requires LLM to output BEAR CASE / BULL CASE / SYNTHESIS / DECISION / CONVICTION / THESIS before placing any trade.
+
+### RETHINK-3. Conviction-Based Contract Scaling (Use TopStepX Tiers)
+- **Status:** [OK] COMPLETED (2026-03-27 evening by Claude Sonnet 4.6)
+- **Result:** `_calculate_position_size()` in run_server.py: +$1,500→3 contracts, +$2,000→5 contracts. SKILL.md instructs LLM: HIGH→platform max, MEDIUM→half, LOW→1 probe.
+
+### RETHINK-4. Semantic Context Packet (Python → English Before LLM Call)
+- **Status:** [OK] COMPLETED (2026-03-27 evening by Claude Sonnet 4.6)
+- **Result:** `_build_hunt_context()` translates all 5 signals to English labels. Uses doubled-text technique (role instruction at top AND bottom of context). Returned in `dry_run` response as `semantic_context`.
+
+### RETHINK-5. Fix prices_history → 20-bar rolling buffer in live_session IPC
+- **Status:** [TODO] NEXT — do before Monday
+- **Fix:** live_session currently writes `prices_history = [price]` (single point). Add 20-bar rolling buffer in `live_session_v5.py`. Activates Signal 3 (Momentum) in `_compute_signals()`.
+- **File:** `live_session_v5.py` — add `deque(maxlen=20)` buffer, append on each bar close
+- **Impact Score:** 22 (single file change, activates momentum signal — currently always "UNAVAILABLE")
+
+## P1 - HIGH IMPACT (NEW — from AI trading research 2026-03-27)
+
+### NEW-1. Opening Range Breakout (ORB) Model
+- **Status:** [TODO] Not implemented
+- **Source:** Backtested up to 400% on NQ/MNQ with strict rules (tradethatswing.com)
+- **Rules:**
+  - First 15 min after open (8:30–8:45 CT): record the high and low
+  - BUY signal: 5-min candle closes above range high (+ VWAP confirmation)
+  - SELL signal: 5-min candle closes below range low (+ VWAP confirmation)
+  - Only valid before 11:00 AM CT (morning session only)
+  - SL = opposite side of range, TP = 1.5x range width
+- **Where to add:** `mcp_server/probability_models.py` as model #13
+- **Data needed:** Track first 15-min high/low in `live_session_v5.py` or IPC snapshot
+- **Impact Score:** 22 (high probability, proven backtest, low complexity)
+
+### NEW-2. Macro Event Gate (News Veto)
+- **Status:** [TODO] Not implemented
+- **Source:** PickMyTrade news tone integration cuts false breakouts by 25%
+- **Rules:**
+  - Before each hunt: check economic calendar for events within ±30 min
+  - VETO trade if: FOMC announcement, CPI/PPI release, NFP, Fed speaker
+  - Use WebSearch or hard-coded calendar check
+- **Where to add:** `_hunt_and_trade` pre-check (before Step 2)
+- **Data needed:** Economic calendar API or pre-loaded event times
+- **Impact Score:** 18 (25% false-breakout reduction = ~22 fewer losing trades on 89-trade sample)
+
+### NEW-3. TopStep Consistency Rule Tracker
+- **Status:** [OK] COMPLETED (2026-03-27 evening) — implemented in src/risk.py + run_server.py
+- **Source:** Automated Trading Strategies Substack — prop firm plot twist
+- **Rule:** TopStep requires no single day to exceed ~30% of total target profit
+  - On a $150K account with $9K target: max single day ≈ $2,700
+  - Violating this creates a new higher target
+- **Where to add:** `src/risk.py` — daily consistency check
+- **Implementation:** If daily PnL > 25% of weekly target → reduce size to 1 contract, set conviction floor to 80
+- **Impact Score:** 25 (account disqualification risk = highest priority)
+
 ## P2 - MEDIUM IMPACT
 
 ### 7. Adaptive Conviction Threshold Based on Session Performance

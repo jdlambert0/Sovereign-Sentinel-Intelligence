@@ -1462,6 +1462,7 @@ class LiveSessionV4:
             high_of_session=tick.high,
             low_of_session=tick.low if tick.low != float("inf") else tick.last_price,
             price_change_pct=pct_chg,
+            vwap=tick.vwap,  # Session VWAP: cumulative (price*vol)/vol, tracked in MarketTick
         )
 
     def _ai_decide(self, snapshot: MarketSnapshot, meta: Dict) -> Optional[Dict]:

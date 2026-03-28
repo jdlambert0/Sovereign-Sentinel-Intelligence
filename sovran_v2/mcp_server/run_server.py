@@ -6,7 +6,9 @@ Any LLM with MCP support connects with one command:
   py -3.12 C:\\KAI\\sovran_v2\\mcp_server\\run_server.py
 
 This replaces the IPC file protocol. The LLM IS the trader.
-All 12 probability models run live. Obsidian is the persistent memory.
+5 clean signals (OFI/VPIN, VWAP structure, momentum, volatility, session context).
+LLM adversarial reasoning is the brain. Python computes signals, LLM decides.
+Obsidian is the persistent memory.
 
 Tools exposed:
   - get_market_snapshot   : current market state for all 6 contracts
@@ -27,7 +29,7 @@ import time
 import logging
 import glob as glob_module
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 # Add sovran_v2 to path so we can import src modules
@@ -504,12 +506,12 @@ async def _place_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             # Place the order
             side = "BUY" if action == "LONG" else "SELL"
 
-            result = await broker.place_bracket_order(
+            result = await broker.place_market_order(
                 contract_id=contract_id,
                 side=side,
                 size=n_contracts,
-                sl_ticks=sl_ticks,
-                tp_ticks=tp_ticks
+                stop_loss_ticks=sl_ticks,
+                take_profit_ticks=tp_ticks
             )
 
             trade_result = {
@@ -534,11 +536,229 @@ async def _place_trade(args: Dict[str, Any]) -> Dict[str, Any]:
                 "action": action, "contract_id": contract_id}
 
 
+def _compute_signals(snap: dict) -> dict:
+    """
+    Compute 5 clean signals from an enriched market snapshot.
+    Returns a dict with labeled signal strings and direction/conviction per signal.
+    Replaces run_all_models() — only OFI/VPIN has proven signal; others add context.
+    """
+    ofi_z = snap.get("ofi_z", 0.0)
+    vpin = snap.get("vpin", 0.5)
+    price = snap.get("price", 0.0)
+    vwap = snap.get("vwap", 0.0)
+    atr = snap.get("atr_ticks", 12.0)
+    avg_atr = snap.get("avg_atr_ticks", atr)
+    high_sess = snap.get("high_of_session", price)
+    low_sess = snap.get("low_of_session", price)
+    prices_history = snap.get("prices_history", [price])
+
+    # --- Signal 1: Order Flow (OFI + VPIN) — primary oracle ---
+    if ofi_z > 1.5 and vpin > 0.60:
+        of_label = f"STRONG BULLISH (OFI {ofi_z:+.1f}σ, VPIN {vpin:.2f} — informed buying confirmed)"
+        of_dir, of_conv = "LONG", min(90, 60 + int(abs(ofi_z) * 10))
+    elif ofi_z > 0.8:
+        of_label = f"MILD BULLISH (OFI {ofi_z:+.1f}σ — buy pressure building)"
+        of_dir, of_conv = "LONG", int(50 + abs(ofi_z) * 8)
+    elif ofi_z < -1.5 and vpin > 0.60:
+        of_label = f"STRONG BEARISH (OFI {ofi_z:+.1f}σ, VPIN {vpin:.2f} — informed selling confirmed)"
+        of_dir, of_conv = "SHORT", min(90, 60 + int(abs(ofi_z) * 10))
+    elif ofi_z < -0.8:
+        of_label = f"MILD BEARISH (OFI {ofi_z:+.1f}σ — sell pressure building)"
+        of_dir, of_conv = "SHORT", int(50 + abs(ofi_z) * 8)
+    else:
+        of_label = f"NEUTRAL (OFI {ofi_z:+.1f}σ — no informed flow detected)"
+        of_dir, of_conv = "NEUTRAL", 25
+
+    # --- Signal 2: Price Structure (VWAP + session range) ---
+    range_size = high_sess - low_sess
+    range_pct = ((price - low_sess) / range_size * 100) if range_size > 0.01 else 50.0
+    if vwap > 0.01:
+        vwap_dev_pct = (price - vwap) / vwap * 100
+        if vwap_dev_pct > 0.10:
+            ps_label = f"ABOVE VWAP +{vwap_dev_pct:.2f}% (bullish structure, {range_pct:.0f}% of session range)"
+            ps_dir = "LONG"
+        elif vwap_dev_pct < -0.10:
+            ps_label = f"BELOW VWAP {vwap_dev_pct:.2f}% (bearish structure, {range_pct:.0f}% of session range)"
+            ps_dir = "SHORT"
+        else:
+            ps_label = f"AT VWAP (+-{abs(vwap_dev_pct):.2f}%, {range_pct:.0f}% of session range — balanced)"
+            ps_dir = "NEUTRAL"
+    else:
+        ps_label = f"VWAP unavailable — session range {range_pct:.0f}% consumed (H:{high_sess:.1f} L:{low_sess:.1f})"
+        ps_dir = "NEUTRAL"
+
+    # --- Signal 3: Momentum (from prices_history rolling buffer) ---
+    if len(prices_history) >= 5:
+        recent = prices_history[-5:]
+        roc = (recent[-1] - recent[0]) / recent[0] * 100 if recent[0] > 0 else 0
+        up_bars = sum(1 for i in range(1, len(recent)) if recent[i] > recent[i-1])
+        if roc > 0.05 and up_bars >= 3:
+            mom_label = f"UPWARD MOMENTUM ({roc:+.3f}%, {up_bars}/4 bars up)"
+            mom_dir = "LONG"
+        elif roc < -0.05 and up_bars <= 1:
+            mom_label = f"DOWNWARD MOMENTUM ({roc:+.3f}%, {4-up_bars}/4 bars down)"
+            mom_dir = "SHORT"
+        else:
+            mom_label = f"FLAT/MIXED ({roc:+.3f}%, {up_bars}/4 bars up — choppy)"
+            mom_dir = "NEUTRAL"
+    else:
+        mom_label = "UNAVAILABLE (live_session must run >5 bars before momentum is valid)"
+        mom_dir = "NEUTRAL"
+
+    # --- Signal 4: Volatility Regime ---
+    vol_ratio = atr / avg_atr if avg_atr > 0.01 else 1.0
+    if vol_ratio > 1.5:
+        vol_label = f"HIGH ({atr:.1f}t vs {avg_atr:.1f}t avg = {vol_ratio:.1f}x) — widen stops, reduce size"
+        vol_regime = "high"
+    elif vol_ratio < 0.7:
+        vol_label = f"LOW ({atr:.1f}t vs {avg_atr:.1f}t avg = {vol_ratio:.1f}x) — tighter spreads, normal size"
+        vol_regime = "low"
+    else:
+        vol_label = f"NORMAL ({atr:.1f}t vs {avg_atr:.1f}t avg)"
+        vol_regime = "normal"
+
+    # --- Signal 5: Session Context (CT time) ---
+    now_ct = datetime.now(timezone(timedelta(hours=-5)))
+    ct_mins = now_ct.hour * 60 + now_ct.minute
+    if 510 <= ct_mins < 525:
+        sess_label = "ORB WINDOW (8:30-8:45 CT) — establishing range, await breakout confirmation"
+        sess_ctx = "orb_window"
+    elif 525 <= ct_mins < 600:
+        sess_label = "POWER HOUR (8:45-10:00 CT) — highest probability setups, full aggression"
+        sess_ctx = "power_hour"
+    elif 600 <= ct_mins < 840:
+        sess_label = "MID-SESSION (10:00 AM-2:00 PM CT) — mean reversion favored"
+        sess_ctx = "mid_session"
+    elif 840 <= ct_mins < 935:
+        sess_label = "PRE-CLOSE (2:00-3:55 PM CT) — watch for late squeezes"
+        sess_ctx = "pre_close"
+    else:
+        sess_label = f"OUTSIDE HOURS ({now_ct.strftime('%H:%M')} CT)"
+        sess_ctx = "outside_hours"
+
+    return {
+        "of_label": of_label, "of_dir": of_dir, "of_conv": of_conv,
+        "ps_label": ps_label, "ps_dir": ps_dir,
+        "mom_label": mom_label, "mom_dir": mom_dir,
+        "vol_label": vol_label, "vol_regime": vol_regime,
+        "sess_label": sess_label, "sess_ctx": sess_ctx,
+    }
+
+
+def _build_hunt_context(snap: dict, signals: dict, memory: dict,
+                        all_results: list, daily_pnl: float) -> str:
+    """
+    Build a semantic English context packet for LLM reasoning.
+    Uses doubled-text technique: role instruction repeated at top AND bottom
+    to counteract lost-in-the-middle effect and improve LLM decision quality.
+    """
+    contract = snap.get("contract_id", "?")
+    price = snap.get("price", 0.0)
+    atr = snap.get("atr_ticks", 12.0)
+    tick_val = snap.get("tick_value", 0.50)
+
+    sl_ticks = max(8, round(atr * 0.8))
+    tp_ticks = round(sl_ticks * 1.8)
+    risk_per_contract = sl_ticks * tick_val
+    reward_per_contract = tp_ticks * tick_val
+
+    perf = memory.get("performance_by_contract", {}).get(contract, {})
+    wins = perf.get("wins", 0)
+    losses = perf.get("losses", 0)
+    hist_summary = f"{wins}W/{losses}L on this contract" if (wins + losses) > 0 else "No history on this contract"
+
+    alts = [r for r in all_results if r.get("contract_id") != contract]
+    alt_summary = "; ".join(
+        f"{r['name']} {r['signal']} conv={r['conviction']}"
+        for r in alts[:3]
+    ) if alts else "No alternatives"
+
+    # Doubled-text: same role+task instruction at BOTH top and bottom
+    header = (
+        "You are an expert intraday futures trader with deep knowledge of order flow and market "
+        "microstructure. Analyze this market snapshot and decide: LONG, SHORT, or a LOW-conviction "
+        "probe trade. Never idle — always find the best available setup."
+    )
+    footer = (
+        "You are an expert intraday futures trader with deep knowledge of order flow and market "
+        "microstructure. Your decision: LONG / SHORT / NO_TRADE. "
+        "Conviction: HIGH / MEDIUM / LOW. "
+        "State your BEAR CASE, BULL CASE, SYNTHESIS, and one-sentence THESIS."
+    )
+
+    return f"""{header}
+
+MARKET SNAPSHOT — {contract} @ {price:.2f}  [{datetime.now().strftime('%H:%M CT')}]
+===============================================================
+
+ORDER FLOW (PRIMARY SIGNAL):
+  {signals['of_label']}
+
+PRICE STRUCTURE:
+  {signals['ps_label']}
+
+MOMENTUM:
+  {signals['mom_label']}
+
+VOLATILITY REGIME:
+  {signals['vol_label']}
+
+SESSION CONTEXT:
+  {signals['sess_label']}
+
+SUGGESTED TRADE PARAMETERS (Python math — LLM may adjust):
+  Stop: {sl_ticks} ticks (${risk_per_contract:.0f}/contract)
+  Target: {tp_ticks} ticks (${reward_per_contract:.0f}/contract)
+  R:R = 1:{tp_ticks/sl_ticks:.1f}
+
+ACCOUNT CONTEXT:
+  Daily PnL today: ${daily_pnl:+.0f} (cap: $2,700 — DO NOT exceed)
+  Historical: {hist_summary}
+
+OTHER CONTRACTS (ranked by conviction):
+  {alt_summary}
+
+{footer}""".strip()
+
+
+def _calculate_position_size(conviction: str, account_balance: float,
+                              starting_balance: float = 147000.0,
+                              daily_pnl: float = 0.0) -> int:
+    """
+    TopStepX Express Funded Account scaling tiers:
+      Starting balance: 2 contracts
+      +$1,500 above starting: 3 contracts
+      +$2,000 above starting: 5 contracts
+    Conviction multiplier: HIGH=platform max, MEDIUM=half (min 2), LOW=1 probe.
+    """
+    gain = account_balance - starting_balance
+
+    if gain >= 2000:
+        platform_max = 5
+    elif gain >= 1500:
+        platform_max = 3
+    else:
+        platform_max = 2
+
+    # Approaching daily cap → cap at 1 contract regardless of conviction
+    if daily_pnl >= 2700 * 0.75:  # $2,025
+        platform_max = min(platform_max, 1)
+
+    conviction_fraction = {"HIGH": 1.0, "MEDIUM": 0.5, "LOW": 0.25}.get(conviction, 0.0)
+    if conviction_fraction == 0.0:
+        return 0
+
+    raw = max(1, round(platform_max * conviction_fraction))
+    return min(raw, platform_max)
+
+
 async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
     """
     Full autonomous trade cycle in a single call.
     - Handles TopStepX single-connection constraint (stops running session if needed)
-    - Scans all contracts, runs all 12 models, places best trade
+    - Scans all contracts, computes 5 clean signals, builds semantic context for LLM
+    - dry_run=True: returns semantic context for LLM reasoning (2-step skill flow)
+    - dry_run=False: places trade directly using Python conviction score
     - Returns complete decision audit trail
     """
     import subprocess, time as time_mod
@@ -546,40 +766,69 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
     conviction_threshold = args.get("conviction_threshold", 65)
     dry_run = args.get("dry_run", False)
 
-    # ── Step 1: Connection conflict detection ───────────────────────────────
+    # ── Step 1: Kill ai_decision_engine (NOT live_session) ──────────────────
+    # live_session_v5 must keep running — it is the OFI/VPIN data provider.
+    # We only kill ai_decision_engine.py so the LLM (us) can be the brain.
+    # live_session will continue writing IPC request files; we respond to them.
     session_mode = "direct"
     pid_file = SOVRAN_DIR / "trading.pid"
-    stop_signal_path = SOVRAN_DIR / "stop_signal.txt"
 
-    # Check for fresh IPC files (session is actively running)
+    # Kill ai_decision_engine if running (it competes with LLM for IPC responses)
+    engine_pid_file = SOVRAN_DIR / "ipc" / "ai_engine.pid"
+    if not engine_pid_file.exists():
+        engine_pid_file = SOVRAN_DIR / "ipc_responder.pid"
+    if engine_pid_file.exists():
+        try:
+            pid = int(engine_pid_file.read_text().strip())
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"],
+                           capture_output=True, timeout=5)
+            engine_pid_file.unlink(missing_ok=True)
+            logger.info(f"Killed ai_decision_engine (PID {pid}) — LLM is now the brain")
+        except Exception as e:
+            logger.warning(f"Could not kill ai_decision_engine: {e} (may not be running)")
+
+    # Check for fresh IPC request files (live_session is actively running)
     fresh_ipc = False
+    ipc_snapshot: Dict[str, Any] = {}
     request_files = sorted(IPC_DIR.glob("request_*.json"), key=lambda p: p.stat().st_mtime)
     if request_files:
         age = time_mod.time() - request_files[-1].stat().st_mtime
         fresh_ipc = age < 120  # < 2 minutes old
-
-    if fresh_ipc and pid_file.exists():
-        if dry_run:
-            session_mode = "ipc_read_only"  # dry run: just read, don't conflict
-        else:
-            # Stop the running session so we can take the connection
+        if fresh_ipc:
             try:
-                pid = int(pid_file.read_text().strip())
-                stop_signal_path.write_text("STOP")
-                subprocess.run(["taskkill", "/PID", str(pid), "/F"],
-                               capture_output=True, timeout=5)
-                time_mod.sleep(2)
-                session_mode = "direct_took_over"
-                logger.info(f"Stopped running session (PID {pid}) to take connection")
-            except Exception as e:
-                session_mode = "ipc_fallback"
-                logger.warning(f"Could not stop session: {e} — using IPC snapshot only")
-    elif not fresh_ipc and not pid_file.exists():
-        session_mode = "direct_cold"
+                with open(request_files[-1]) as f:
+                    ipc_snapshot = json.load(f)
+                session_mode = "live_session_ipc"
+                logger.info(f"Reading live OFI/VPIN from IPC: age={age:.0f}s")
+            except Exception:
+                pass
+
+    if not fresh_ipc:
+        if pid_file.exists():
+            session_mode = "live_session_no_data"
+            logger.warning("live_session running but no fresh IPC data — OFI/VPIN will be cold")
+        else:
+            session_mode = "direct_cold"
+            logger.warning("live_session not running — start it for live OFI/VPIN data")
 
     # ── Step 2: Get market snapshot for all contracts ───────────────────────
+    # If we have a live IPC snapshot, inject its OFI/VPIN into the market data
     snapshots_result = await _get_market_snapshot("all")
     contract_snaps = snapshots_result.get("contracts", []) if isinstance(snapshots_result, dict) else []
+
+    # Enrich snapshots with IPC OFI/VPIN/VWAP if available
+    if ipc_snapshot and contract_snaps:
+        ipc_sd = ipc_snapshot.get("snapshot_data", ipc_snapshot)  # support both formats
+        ipc_contract = ipc_sd.get("contract_id", ipc_snapshot.get("contract_id", ""))
+        for snap in contract_snaps:
+            if snap.get("contract_id") == ipc_contract or not snap.get("contract_id"):
+                snap["ofi_z"] = ipc_sd.get("ofi_zscore", ipc_sd.get("ofi_z", snap.get("ofi_z", 0.0)))
+                snap["vpin"] = ipc_sd.get("vpin", snap.get("vpin", 0.5))
+                snap["atr_ticks"] = ipc_sd.get("atr_points", ipc_sd.get("atr_ticks", snap.get("atr_ticks", 12.0)))
+                snap["vwap"] = ipc_sd.get("vwap", snap.get("vwap", 0.0))
+                snap["high_of_session"] = ipc_sd.get("high_of_session", snap.get("high_of_session", snap.get("price", 0.0)))
+                snap["low_of_session"] = ipc_sd.get("low_of_session", snap.get("low_of_session", snap.get("price", 0.0)))
+                snap["_ipc_enriched"] = True
 
     if not contract_snaps:
         return {
@@ -589,53 +838,49 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             "hint": "Market must be open and live_session_v5.py running to get live data"
         }
 
-    # ── Step 3: Run all 12 models on each contract ──────────────────────────
+    # ── Step 3: Compute 5 clean signals on each contract ────────────────────
+    # Replaces 12-model voting (8/12 were broken/correlated).
+    # Order Flow (OFI+VPIN) is the oracle. VWAP/momentum/vol/session add context.
     memory = _load_memory()
-    best = {"conviction": 0, "contract_id": None, "signal": "NEUTRAL", "snap": {}, "models": {}}
+    best = {"conviction": 0, "contract_id": None, "signal": "NEUTRAL", "snap": {}, "signals": {}}
     all_results = []
 
     for snap in contract_snaps:
         if not snap.get("price") or snap.get("price", 0) <= 0:
             continue
         try:
-            result = run_all_models(snap, memory)
-            summary = result.get("summary", {})
-            # Use avg_conviction (0-100 scale) weighted by consensus direction strength
-            # consensus_strength is 0-1 (direction purity), avg_conviction is 0-100
-            avg_conv = summary.get("avg_conviction", 0)
-            consensus = summary.get("consensus_strength", 0)
-            # Informed conviction: avg of models that have an actual opinion (>20 conviction)
-            all_model_convs = [v["conviction"] for v in result.get("models", {}).values() if v["conviction"] > 20]
-            informed_conv = round(sum(all_model_convs) / max(len(all_model_convs), 1), 1) if all_model_convs else 0
-            # Final: use informed conviction scaled by direction consensus
-            conv = round(informed_conv * (0.6 + consensus * 0.4))
-            signal = summary.get("dominant_signal", "NEUTRAL")
-            ofi_z = snap.get("ofi_z", 0)
-            vpin = snap.get("vpin", 0)
+            signals = _compute_signals(snap)
+            of_conv = signals["of_conv"]
+            of_dir = signals["of_dir"]
 
+            # Alignment bonuses: other signals confirming order flow direction
+            alignment_bonus = 10 if signals["ps_dir"] == of_dir and of_dir != "NEUTRAL" else 0
+            mom_bonus = 5 if signals["mom_dir"] == of_dir and of_dir != "NEUTRAL" else 0
+            vol_penalty = -10 if signals["vol_regime"] == "high" else 0
+            conv = max(0, min(100, of_conv + alignment_bonus + mom_bonus + vol_penalty))
+
+            contract_name = CONTRACT_NAMES.get(snap.get("contract_id", ""), snap.get("contract_id", ""))
             all_results.append({
-                "contract": snap.get("contract_id"),
-                "name": snap.get("name", snap.get("contract_id", "")),
+                "contract_id": snap.get("contract_id"),
+                "name": contract_name,
                 "price": snap.get("price"),
                 "conviction": conv,
-                "signal": signal,
-                "ofi_z": round(ofi_z, 3),
-                "vpin": round(vpin, 3),
-                "data_age_secs": snap.get("_age_seconds", 999)
+                "signal": of_dir,
+                "ofi_z": round(snap.get("ofi_z", 0), 3),
+                "vpin": round(snap.get("vpin", 0.5), 3),
+                "signals_summary": signals,
             })
 
             if conv > best["conviction"]:
                 best = {
                     "conviction": conv,
                     "contract_id": snap.get("contract_id"),
-                    "signal": signal,
+                    "signal": of_dir,
                     "snap": snap,
-                    "models": result,
-                    "ofi_z": ofi_z,
-                    "vpin": vpin
+                    "signals": signals,
                 }
         except Exception as e:
-            logger.warning(f"Model run failed for {snap.get('contract_id')}: {e}")
+            logger.warning(f"Signal computation failed for {snap.get('contract_id')}: {e}")
             continue
 
     # Sort by conviction descending
@@ -643,6 +888,20 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
 
     # ── Step 4: Decision ────────────────────────────────────────────────────
     phase = _current_session_phase()
+
+    # TopStep Consistency Rule check (max $2,700/day on $150K/9K target)
+    daily_pnl = _get_daily_pnl_from_memory()
+    MAX_DAILY_PROFIT = 2700.0
+    CAUTION_THRESHOLD = MAX_DAILY_PROFIT * 0.75  # $2,025
+    if daily_pnl >= MAX_DAILY_PROFIT:
+        return {
+            "action": "NO_TRADE",
+            "reason": f"Daily profit cap reached: ${daily_pnl:.2f} >= ${MAX_DAILY_PROFIT:.0f}. STOP for today — TopStep consistency rule.",
+            "daily_pnl": daily_pnl,
+            "all_scanned": all_results
+        }
+    in_caution = daily_pnl >= CAUTION_THRESHOLD
+    effective_threshold = max(conviction_threshold, 80) if in_caution else conviction_threshold
 
     if phase == "outside_hours":
         return {
@@ -654,16 +913,29 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             "best_conviction": best["conviction"]
         }
 
-    if best["conviction"] < conviction_threshold:
+    # Build semantic context (always — returned in both dry_run and low-conviction responses)
+    semantic_context = _build_hunt_context(
+        best["snap"], best["signals"], memory, all_results, daily_pnl
+    ) if best.get("snap") else "No best contract found — all signals neutral."
+
+    # Pre-compute suggested stops for dry_run response
+    best_atr = best["snap"].get("atr_ticks", 12.0) if best.get("snap") else 12.0
+    suggested_sl = max(8, round(best_atr * 0.8))
+    suggested_tp = round(suggested_sl * 1.8)
+
+    if best["conviction"] < effective_threshold:
         return {
             "action": "NO_TRADE",
-            "reason": f"Best conviction {best['conviction']} < threshold {conviction_threshold}",
+            "reason": f"Best conviction {best['conviction']} < threshold {effective_threshold}" +
+                      (" [CAUTION MODE: daily PnL near cap]" if in_caution else ""),
             "best_setup": best.get("contract_id"),
             "best_conviction": best["conviction"],
             "best_signal": best["signal"],
             "all_scanned": all_results,
             "session_mode": session_mode,
-            "advice": "Wait for higher conviction setup. Models are uncertain right now."
+            "daily_pnl": daily_pnl,
+            "semantic_context": semantic_context,
+            "advice": "Conviction below threshold — but LLM may override using semantic_context above."
         }
 
     if dry_run:
@@ -671,24 +943,51 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             "action": "DRY_RUN",
             "would_trade": best.get("contract_id"),
             "would_direction": best["signal"],
-            "conviction": best["conviction"],
+            "conviction_score": best["conviction"],
+            "semantic_context": semantic_context,
+            "suggested_sl_ticks": suggested_sl,
+            "suggested_tp_ticks": suggested_tp,
             "all_scanned": all_results,
-            "note": "dry_run=True — no trade placed"
+            "session_mode": session_mode,
+            "daily_pnl": daily_pnl,
+            "note": "dry_run=True — LLM should reason about semantic_context and call place_trade if confirmed"
         }
 
     # ── Step 5: Place the trade ─────────────────────────────────────────────
     contract = best["contract_id"]
     signal = best["signal"]
     snap = best["snap"]
-    atr = snap.get("atr_ticks", 12.0)
-    sl = max(8, round(atr * 0.8))
-    tp = round(sl * 1.8)
+    sl = suggested_sl
+    tp = suggested_tp
 
-    models_summary = best["models"].get("summary", {})
+    sigs = best.get("signals", {})
     reasoning = (
         f"hunt_and_trade: {signal} conv={best['conviction']} "
-        f"OFI_Z={best['ofi_z']:.2f} VPIN={best['vpin']:.3f} "
-        f"| {models_summary.get('reasoning', '')}"
+        f"| OF: {sigs.get('of_label', 'n/a')[:60]} "
+        f"| {sigs.get('ps_label', '')[:40]}"
+    )
+
+    # Conviction-based position sizing (TopStepX scaling tiers)
+    if best["conviction"] >= 75:
+        conviction_label = "HIGH"
+    elif best["conviction"] >= 55:
+        conviction_label = "MEDIUM"
+    else:
+        conviction_label = "LOW"
+
+    # Use account balance from broker if available, fallback to config default
+    try:
+        from src.broker import BrokerClient as _BC
+        _broker = _BC()
+        acct_balance = getattr(_broker, "account_balance", None) or 147000.0
+    except Exception:
+        acct_balance = 147000.0
+
+    n_contracts = _calculate_position_size(
+        conviction=conviction_label,
+        account_balance=acct_balance,
+        starting_balance=147000.0,
+        daily_pnl=daily_pnl,
     )
 
     trade_result = await _place_trade({
@@ -696,7 +995,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
         "contract_id": contract,
         "sl_ticks": sl,
         "tp_ticks": tp,
-        "contracts": 1,
+        "contracts": n_contracts,
         "conviction": best["conviction"],
         "reasoning": reasoning
     })
@@ -708,7 +1007,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
             action="LONG" if signal == "LONG" else "SHORT",
             thesis=reasoning,
             conviction=best["conviction"],
-            models_summary=models_summary,
+            models_summary=sigs,
             entry_price=snap.get("price", 0),
             sl_ticks=sl,
             tp_ticks=tp
@@ -720,6 +1019,8 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
         "action": "LONG" if signal == "LONG" else "SHORT",
         "contract": contract,
         "conviction": best["conviction"],
+        "conviction_label": conviction_label,
+        "contracts": n_contracts,
         "sl_ticks": sl,
         "tp_ticks": tp,
         "entry_price": snap.get("price"),
@@ -728,6 +1029,26 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
         "session_mode": session_mode,
         "reasoning": reasoning
     }
+
+
+def _get_daily_pnl_from_memory() -> float:
+    """Best-effort daily PnL from trade history. Used for consistency cap check."""
+    try:
+        from datetime import date
+        today = date.today().isoformat()
+        history_file = SOVRAN_DIR / "state" / "trade_history.json"
+        if not history_file.exists():
+            return 0.0
+        with open(history_file) as f:
+            trades = json.load(f)
+        daily = sum(
+            t.get("pnl", 0) or 0
+            for t in trades
+            if isinstance(t, dict) and t.get("timestamp", "")[:10] == today and t.get("outcome") in ("WIN", "LOSS", "BREAKEVEN")
+        )
+        return round(daily, 2)
+    except Exception:
+        return 0.0
 
 
 def _load_memory() -> Dict[str, Any]:
