@@ -67,8 +67,10 @@ Expected Impact Score = (Probability of Fix Working x Estimated P&L Impact x Eas
 
 ## P1 - HIGH IMPACT (NEW — from AI trading research 2026-03-27)
 
-### NEW-1. Opening Range Breakout (ORB) Model
-- **Status:** [TODO] Not implemented
+### NEW-1. Opening Range Breakout (ORB) Model — PARTIAL
+- **Status:** [PARTIAL] ORB bonus signal implemented (2026-03-28 by Claude Sonnet 4.6)
+- **Done:** During power_hour (8:45-10am CT), if price is at/above session high and signal=LONG -> +8 conviction bonus. Same for SHORT/session low.
+- **Future:** Dedicated ORB buffer in live_session (track only 8:30-8:45 CT high/low separately from session H/L). Not needed until current proxy is validated live.
 - **Source:** Backtested up to 400% on NQ/MNQ with strict rules (tradethatswing.com)
 - **Rules:**
   - First 15 min after open (8:30–8:45 CT): record the high and low
@@ -81,7 +83,8 @@ Expected Impact Score = (Probability of Fix Working x Estimated P&L Impact x Eas
 - **Impact Score:** 22 (high probability, proven backtest, low complexity)
 
 ### NEW-2. Macro Event Gate (News Veto)
-- **Status:** [TODO] Not implemented
+- **Status:** [OK] COMPLETED (2026-03-28 by Claude Sonnet 4.6)
+- **Result:** `_check_news_veto()` in run_server.py. Hardcoded 2026 calendar (FOMC x8, CPI x12, NFP x12). Blocks trades within 30 min of events. Tested: correct on all 4 gate math scenarios.
 - **Source:** PickMyTrade news tone integration cuts false breakouts by 25%
 - **Rules:**
   - Before each hunt: check economic calendar for events within ±30 min

@@ -1,163 +1,165 @@
 ---
 title: SESSION HANDOFF — CURRENT STATE (Always Up To Date)
 type: session-handoff
-updated: 2026-03-27T23:45:00-05:00
-next_priority: Monday 8am CT — run `py scripts/llm_as_brain.py` then say "hunt"
+updated: 2026-03-28T09:15:00-05:00
+next_priority: Monday 8am CT — start live_session, say "hunt"
 ---
 
 # SESSION HANDOFF — READ THIS FIRST
 
-**Read this + CODEBASE_MAP.md to get fully up to speed.**
+**System is fully built, tested offline, and ready for live trading Monday.**
 
 ---
 
-## SYSTEM STATUS: WEEKEND — MARKETS CLOSED
-
-Last session closed at ~4pm CT Friday 2026-03-27. Next open: Monday 8:00 AM CT.
-
----
-
-## CURRENT STATE (as of 2026-03-27 ~23:45 CT)
+## SYSTEM STATUS: WEEKEND — READY FOR MONDAY
 
 | Item | Status |
 |------|--------|
 | Account balance | $149,150.80 |
 | Open positions | 0 (clean) |
-| Live trades logged | 89 total (3 days) |
-| Live PnL | +$337.43 (50% win rate, positive expectancy — winners 2.5x losers) |
-| MCP Server | Registered in ~/.claude/settings.json as sovereign-sentinel |
-| GitHub | https://github.com/jdlambert0/Sovereign-Sentinel-Intelligence (branch: main) |
-| Architecture | **LLM-as-brain (NEW)** — 2-step hunt: dry_run → LLM reasons → place_trade |
+| Architecture | LLM-as-brain (5 signals + adversarial reasoning) |
+| MCP Server | Registered as `sovereign-sentinel` in ~/.claude/settings.json |
+| GitHub | https://github.com/jdlambert0/Sovereign-Sentinel-Intelligence (synced) |
+| All offline tests | 13/13 PASSED |
 
 ---
 
-## WHAT WAS BUILT THIS SESSION (Claude Sonnet 4.6, 2026-03-27 evening)
-
-### Architecture: Hunt V2 — LLM is the Brain
-
-The 12-model voting system was replaced. Only Model 8 (OFI/VPIN) had a real signal.
-8/12 were broken, correlated, or fabricating inputs. Now we have:
-
-**5 clean Python signals → semantic English → LLM adversarial reasoning → deterministic contract sizing**
-
-### New Functions in `mcp_server/run_server.py`
-
-| Function | Purpose |
-|----------|---------|
-| `_compute_signals(snap)` | 5-signal engine: Order Flow, Price Structure (VWAP), Momentum, Volatility Regime, Session Context |
-| `_build_hunt_context(...)` | Semantic English packet for LLM — doubled-text (role at top AND bottom) |
-| `_calculate_position_size(...)` | TopStepX tier scaling: +$1500→3, +$2000→5 contracts |
-
-### Updated Files
-
-| File | Change |
-|------|--------|
-| `mcp_server/run_server.py` | Replaced `run_all_models()` with 5-signal system; dry_run now returns `semantic_context`; Step 5 uses `_calculate_position_size()` |
-| `src/market_data.py` | Added `vwap: float = 0.0` field to MarketSnapshot |
-| `live_session_v5.py` | Passes `tick.vwap` in `_build_snapshot()` |
-| `skills/trade/SKILL.md` | Full rewrite: 2-step flow (dry_run → reason → place_trade), adversarial framing, TopStepX sizing rules |
-| `obsidian/CODEBASE_MAP.md` | Updated signal architecture, 2-step flow diagram, VWAP data flow |
-| `obsidian/kaizen_backlog.md` | RETHINK-1 through RETHINK-4 marked COMPLETED |
-
-### What Kaizen Items Are Done
-
-| # | Item | Status |
-|---|------|--------|
-| RETHINK-1 | Replace 12 broken models with 5 real signals | [OK] COMPLETED |
-| RETHINK-2 | Adversarial bull/bear framing in SKILL.md | [OK] COMPLETED |
-| RETHINK-3 | Conviction-based contract scaling (TopStepX tiers) | [OK] COMPLETED |
-| RETHINK-4 | Semantic context packet (Python → English) with doubled-text | [OK] COMPLETED |
-| RETHINK-5 | Fix prices_history → 20-bar rolling buffer | [TODO] NEXT |
-
----
-
-## WHAT IS STILL OPEN (NEXT SESSION PRIORITY)
-
-### RETHINK-5: 20-bar prices_history rolling buffer — [OK] COMPLETED
-
-Added `prices_history: List[float]` to `MarketSnapshot`. `_build_snapshot()` passes last 20 bar closes. `decision.py` writes it to IPC. MCP enrichment copies it to each snap. All 5 signals are now live.
-
-### All 5 RETHINK items complete. Offline tests PASSED.
+## VERIFIED: 13/13 TESTS PASS
 
 | Test | Result |
 |------|--------|
-| `_compute_signals()` bullish snap | PASS - STRONG BULLISH, ABOVE VWAP, UPWARD MOMENTUM 4/4 bars |
-| `_compute_signals()` neutral/empty | PASS - NEUTRAL + momentum UNAVAILABLE (correct until bars accumulate) |
-| `_calculate_position_size()` all tiers | PASS - correct across +$500/+$1600/+$2000 gain, caution mode |
-| `_build_hunt_context()` output | PASS - readable English, doubled-text, correct R:R and tick value |
-| Daily cap logic | PASS - $2800 > $2700 correctly blocks trade |
-| Bug fixed | MEDIUM rounding: int(x+0.5) vs Python banker's rounding (2.5->3, not 2) |
+| IPC reader: extracts snapshot_data, normalizes fields | PASS |
+| 6-contract scan: all contracts scored, winner selected | PASS |
+| Bearish scenario: OFI -2.4s -> SHORT direction | PASS |
+| Daily cap: pnl=$2800 -> NO_TRADE (TopStep consistency rule) | PASS |
+| Caution mode: pnl=$2100 raises threshold to 80 | PASS |
+| Strong signal overrides caution (conv 96 >= 80) | PASS |
+| News veto gate: FOMC/CPI within 30min blocked | PASS |
+| Position sizing: all 4 TopStepX tiers correct | PASS |
+| Semantic context: doubled-text, readable English | PASS |
+| ORB bonus: power_hour breakout adds +8 conviction | PASS |
+| Momentum: UNAVAILABLE when prices_history empty | PASS |
+| MCP server starts without import/startup errors | PASS |
+| All 4 modified files: syntax clean | PASS |
 
-**Remaining live test (Monday 8am CT):**
-- Start live_session, check IPC file for `vwap` + `prices_history` list
-- Say "hunt" and verify full BEAR/BULL/SYNTHESIS/THESIS adversarial flow fires
-
----
-
-## THE NEW HUNT FLOW (2-STEP)
-
-```
-Old: hunt_and_trade(dry_run=False) → Python math votes → trade placed
-
-New: hunt_and_trade(dry_run=True) → semantic_context
-       ↓ LLM reads: BEAR CASE / BULL CASE / SYNTHESIS / DECISION / CONVICTION
-       ↓ LLM calls place_trade(conviction=HIGH→85 / MEDIUM→70 / LOW→55, contracts=2-5)
-       → trade placed
-```
-
-**The calling LLM IS the brain.** hunt_and_trade is now data collection + context building only.
+**One bug found and fixed during testing:**
+- `_get_market_snapshot` was reading `contract_id` from IPC top level instead of
+  `snapshot_data` nested dict. This caused empty `contract_snaps` -> NO_TRADE on every hunt.
+  Fixed: now extracts `snapshot_data`, normalizes field names before returning.
 
 ---
 
-## HOW TO TRADE MONDAY
+## WHAT WAS BUILT THIS SESSION (2026-03-27 to 2026-03-28)
 
-**Step 1** — Start the system (once per session):
+| Change | File | Status |
+|--------|------|--------|
+| Add `vwap` field to MarketSnapshot | `src/market_data.py` | DONE |
+| Pass `tick.vwap` through `_build_snapshot()` | `live_session_v5.py` | DONE |
+| Add `prices_history` to MarketSnapshot + IPC | `src/market_data.py`, `src/decision.py`, `live_session_v5.py` | DONE |
+| Replace 12-model voting with `_compute_signals()` | `mcp_server/run_server.py` | DONE |
+| Add `_build_hunt_context()` with doubled-text | `mcp_server/run_server.py` | DONE |
+| Add `_calculate_position_size()` TopStepX tiers | `mcp_server/run_server.py` | DONE |
+| NEW-2: `_check_news_veto()` (2026 calendar) | `mcp_server/run_server.py` | DONE |
+| ORB bonus signal (power_hour +8 conviction) | `mcp_server/run_server.py` | DONE |
+| Fix IPC reader (`_get_market_snapshot`) | `mcp_server/run_server.py` | DONE |
+| Fix MEDIUM contract sizing (banker's rounding) | `mcp_server/run_server.py` | DONE |
+| Fix Unicode: sigma + em-dash -> ASCII | `mcp_server/run_server.py` | DONE |
+| 2-step skill flow (dry_run -> reason -> trade) | `skills/trade/SKILL.md` | DONE |
+| Update CODEBASE_MAP.md | `obsidian/CODEBASE_MAP.md` | DONE |
+| All kaizen RETHINK items 1-5 | Multiple files | DONE |
+
+---
+
+## HOW TO START MONDAY
+
+**Step 1** — Start the data provider (once, at the beginning of the session):
 ```
 py -3.12 scripts/llm_as_brain.py
 ```
 
-**Step 2** — Then just say:
-```
-hunt
-```
+**Step 2** — Say "hunt" in Claude Code CLI. That's it.
 
-The SKILL.md skill fires automatically. It will:
-1. Call `hunt_and_trade(dry_run=True)` to get `semantic_context`
-2. Reason: BEAR CASE → BULL CASE → SYNTHESIS → DECISION → CONVICTION → THESIS
-3. Call `place_trade(...)` with conviction level and correct contract count
-4. Loop every 3–5 min until 3:55 PM CT
+The skill fires automatically and does:
+1. `hunt_and_trade(dry_run=True)` -> gets `semantic_context`
+2. LLM reasons: BEAR CASE / BULL CASE / SYNTHESIS / DECISION / CONVICTION / THESIS
+3. `place_trade(...)` with conviction-based contract sizing (2-5 contracts)
 
----
-
-## ARCHITECTURE (CURRENT — CORRECT)
-
-```
-live_session_v5 runs → writes ipc/request_*.json (market snapshot + OFI/VPIN + VWAP)
-LLM (Claude/Gemini) calls hunt_and_trade(dry_run=True) → gets semantic English context
-LLM reasons adversarially → outputs conviction + thesis
-LLM calls place_trade() → trade executed with 2-5 contracts
-```
-
-**Never kill live_session_v5. It is the OFI/VPIN/VWAP data source.**
+**One live test still needed:**
+- After live_session starts, check `ipc/request_*.json` → confirm `vwap` and `prices_history` are populated (not 0.0 / empty)
+- This verifies the full data pipeline end-to-end with real market data
 
 ---
 
-## KEY FILES
+## THE NEW HUNT FLOW (LLM IS THE BRAIN)
 
-1. `obsidian/SESSION_HANDOFF_CURRENT.md` ← this file
-2. `obsidian/CODEBASE_MAP.md` ← find root causes fast
-3. `mcp_server/run_server.py` ← main MCP server (3 new functions here)
-4. `skills/trade/SKILL.md` ← the hunt skill (updated for 2-step flow)
-5. `obsidian/kaizen_backlog.md` ← improvement queue
-6. `obsidian/HUNT_RETHINK_27Mar2026.md` ← architecture decision doc
+```
+live_session_v5.py (always running)
+  -> computes OFI/VPIN/VWAP/prices_history
+  -> writes ipc/request_*.json every tick
+
+Claude Code "hunt" command
+  -> hunt_and_trade(dry_run=True)
+     -> reads IPC, builds 5 signals, builds semantic English context
+     -> returns semantic_context to LLM
+  -> LLM reasons adversarially (BEAR/BULL/SYNTHESIS)
+  -> LLM calls place_trade(conviction=HIGH, contracts=2-5)
+  -> trade placed with correct size
+```
 
 ---
 
-## GITHUB
+## SIGNAL ARCHITECTURE (5 SIGNALS)
 
-- Repo: https://github.com/jdlambert0/Sovereign-Sentinel-Intelligence
-- Branch: genspace → main
+| # | Signal | Source | Weight |
+|---|--------|--------|--------|
+| 1 | Order Flow | OFI z-score + VPIN | PRIMARY ORACLE |
+| 2 | Price Structure | VWAP deviation + session range | Alignment bonus +10 |
+| 3 | Momentum | 20-bar rolling price history | Alignment bonus +5 |
+| 4 | Volatility Regime | ATR vs avg ATR | Penalty -10 if high |
+| 5 | Session Context | Time of day (CT) | Context only |
+| 6 | ORB Bonus | Power hour + session H/L break | Bonus +8 |
+
+**Decision gates (in order):**
+1. News veto (FOMC/CPI/NFP within 30 min) -> NO_TRADE
+2. Daily cap ($2,700) -> NO_TRADE
+3. Outside hours (before 8am / after 4pm CT) -> NO_TRADE
+4. Caution mode (pnl > $2,025) -> raise threshold to 80
+5. Conviction below threshold -> NO_TRADE (LLM can still override with LOW probe)
 
 ---
 
-*Updated: 2026-03-27 ~23:45 CT by Claude Sonnet 4.6*
+## CONTRACT SIZING (TopStepX Tiers)
+
+| Account gain | Platform max | HIGH | MEDIUM | LOW |
+|-------------|-------------|------|--------|-----|
+| < $1,500 | 2 contracts | 2 | 1 | 1 |
+| +$1,500 | 3 contracts | 3 | 2 | 1 |
+| +$2,000 | 5 contracts | 5 | 3 | 1 |
+| Caution mode | capped at 1 | 1 | 1 | 1 |
+
+Current account: $149,150 - $147,000 = +$2,150 -> **platform max = 5 contracts**
+
+---
+
+## OPEN ITEMS (Monday live trading will resolve)
+
+| # | Item | Status | Blocker |
+|---|------|--------|---------|
+| Live IPC field check | Verify vwap+prices_history in real IPC files | PENDING | Needs live_session running |
+| Partial TP validation | Validate 0.6x SL partial TP | PENDING | Needs live trades |
+| Regime-specific TP | Trending=0.8x SL, Ranging=0.5x SL | LOW PRIORITY | Needs live data |
+| ORB high/low tracking | Dedicated ORB buffer (not session H/L proxy) | FUTURE | Week 2 |
+
+---
+
+## KEY FILES (READ THESE TO UNDERSTAND THE SYSTEM)
+
+1. `obsidian/CODEBASE_MAP.md` — find anything fast
+2. `mcp_server/run_server.py` — all 4 new functions here
+3. `skills/trade/SKILL.md` — the hunt skill (2-step flow)
+4. `obsidian/kaizen_backlog.md` — what's done, what's open
+5. `obsidian/HUNT_RETHINK_27Mar2026.md` — architecture decision record
+
+---
+
+*Updated: 2026-03-28 09:15 CT by Claude Sonnet 4.6 — 13/13 tests passing, ready for Monday*
