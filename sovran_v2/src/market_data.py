@@ -122,6 +122,9 @@ class MarketSnapshot:
     # Session VWAP (Volume-Weighted Average Price — resets each session)
     vwap: float = 0.0         # 0.0 until first trade tick accumulates volume
 
+    # Rolling close prices (last 20 bars) — used for momentum signal
+    prices_history: List[float] = field(default_factory=list)
+
     # L2 Depth (populated when GatewayDepth data is flowing)
     l2_bid_levels: List[DepthLevel] = field(default_factory=list)
     l2_ask_levels: List[DepthLevel] = field(default_factory=list)

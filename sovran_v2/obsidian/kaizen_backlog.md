@@ -62,10 +62,8 @@ Expected Impact Score = (Probability of Fix Working x Estimated P&L Impact x Eas
 - **Result:** `_build_hunt_context()` translates all 5 signals to English labels. Uses doubled-text technique (role instruction at top AND bottom of context). Returned in `dry_run` response as `semantic_context`.
 
 ### RETHINK-5. Fix prices_history → 20-bar rolling buffer in live_session IPC
-- **Status:** [TODO] NEXT — do before Monday
-- **Fix:** live_session currently writes `prices_history = [price]` (single point). Add 20-bar rolling buffer in `live_session_v5.py`. Activates Signal 3 (Momentum) in `_compute_signals()`.
-- **File:** `live_session_v5.py` — add `deque(maxlen=20)` buffer, append on each bar close
-- **Impact Score:** 22 (single file change, activates momentum signal — currently always "UNAVAILABLE")
+- **Status:** [OK] COMPLETED (2026-03-27 evening by Claude Sonnet 4.6)
+- **Result:** Added `prices_history: List[float]` to `MarketSnapshot`; `_build_snapshot()` passes last 20 bar closes from `tick.bars`; `decision.py` writes it to IPC `snapshot_data`; MCP IPC enrichment copies it to each snap. Signal 3 (Momentum) now active.
 
 ## P1 - HIGH IMPACT (NEW — from AI trading research 2026-03-27)
 

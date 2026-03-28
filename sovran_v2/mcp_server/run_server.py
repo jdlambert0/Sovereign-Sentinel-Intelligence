@@ -828,6 +828,7 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
                 snap["vwap"] = ipc_sd.get("vwap", snap.get("vwap", 0.0))
                 snap["high_of_session"] = ipc_sd.get("high_of_session", snap.get("high_of_session", snap.get("price", 0.0)))
                 snap["low_of_session"] = ipc_sd.get("low_of_session", snap.get("low_of_session", snap.get("price", 0.0)))
+                snap["prices_history"] = ipc_sd.get("prices_history", snap.get("prices_history", []))
                 snap["_ipc_enriched"] = True
 
     if not contract_snaps:

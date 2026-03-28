@@ -1463,6 +1463,7 @@ class LiveSessionV4:
             low_of_session=tick.low if tick.low != float("inf") else tick.last_price,
             price_change_pct=pct_chg,
             vwap=tick.vwap,  # Session VWAP: cumulative (price*vol)/vol, tracked in MarketTick
+            prices_history=[b["c"] for b in bars[-20:]] if bars else [],  # Last 20 bar closes — activates momentum signal
         )
 
     def _ai_decide(self, snapshot: MarketSnapshot, meta: Dict) -> Optional[Dict]:

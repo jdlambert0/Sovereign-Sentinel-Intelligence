@@ -73,20 +73,11 @@ The 12-model voting system was replaced. Only Model 8 (OFI/VPIN) had a real sign
 
 ## WHAT IS STILL OPEN (NEXT SESSION PRIORITY)
 
-### RETHINK-5: 20-bar prices_history rolling buffer (HIGH PRIORITY — do before Monday)
+### RETHINK-5: 20-bar prices_history rolling buffer — [OK] COMPLETED
 
-**Problem:** `live_session_v5.py` currently writes `prices_history = [price]` — a single point.
-The `_compute_signals()` momentum engine needs ≥5 prices to activate. Without this,
-Signal 3 (Momentum) always returns "UNAVAILABLE" — one of 5 signals is dead.
+Added `prices_history: List[float]` to `MarketSnapshot`. `_build_snapshot()` passes last 20 bar closes. `decision.py` writes it to IPC. MCP enrichment copies it to each snap. All 5 signals are now live.
 
-**Fix needed in `live_session_v5.py`:**
-- Add a `deque(maxlen=20)` rolling buffer
-- Append close price every bar
-- Write full list to IPC snapshot
-
-**Impact:** Activates momentum signal. OFI + VWAP + momentum all aligning = highest-conviction trades.
-
-### Then: Run Verification Tests
+### All 5 RETHINK items are complete. Next: Run Verification Tests
 
 1. **VWAP in IPC**: Start live_session, check `ipc/request_*.json` → does `snapshot_data.vwap` exist?
 2. **Dry run labels**: Call `hunt_and_trade(dry_run=True)` → does `semantic_context` look correct?

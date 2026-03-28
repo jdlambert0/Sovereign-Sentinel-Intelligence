@@ -602,6 +602,8 @@ class DecisionEngine:
                         "price_change_pct": snapshot.price_change_pct,
                         "bar_count": snapshot.bar_count,
                         "tick_count": snapshot.tick_count,
+                        "vwap": snapshot.vwap,
+                        "prices_history": list(snapshot.prices_history),
                         "account_balance": account_balance,
                         "daily_pnl": daily_pnl,
                         "distance_to_drawdown": distance_to_drawdown,
