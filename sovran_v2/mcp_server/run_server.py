@@ -411,12 +411,30 @@ async def _get_market_snapshot(contract_id: str = "all") -> Dict[str, Any]:
         try:
             with open(f) as fp:
                 data = json.load(fp)
-            cid = data.get("contract_id", "")
+            # IPC files from decision.py nest fields under "snapshot_data"
+            # Fall back to top-level if snapshot_data is absent (legacy format)
+            sd = data.get("snapshot_data", data)
+            cid = sd.get("contract_id", data.get("contract_id", ""))
             if cid and cid not in seen_contracts:
                 age_secs = time.time() - f.stat().st_mtime
-                data["_age_seconds"] = round(age_secs, 1)
-                data["_file"] = f.name
-                snapshots.append(data)
+                # Flatten snapshot_data into snap; normalize IPC field names
+                snap = dict(sd)
+                snap["contract_id"] = cid
+                snap["_age_seconds"] = round(age_secs, 1)
+                snap["_file"] = f.name
+                # Normalize: IPC uses last_price/atr_points/ofi_zscore; _compute_signals uses price/atr_ticks/ofi_z
+                if "price" not in snap:
+                    snap["price"] = snap.get("last_price", snap.get("mid_price", 0.0))
+                if "atr_ticks" not in snap:
+                    snap["atr_ticks"] = snap.get("atr_points", 12.0)
+                if "ofi_z" not in snap:
+                    snap["ofi_z"] = snap.get("ofi_zscore", 0.0)
+                snap.setdefault("vpin", 0.5)
+                snap.setdefault("vwap", 0.0)
+                snap.setdefault("prices_history", [])
+                snap.setdefault("high_of_session", snap["price"])
+                snap.setdefault("low_of_session", snap["price"])
+                snapshots.append(snap)
                 seen_contracts.add(cid)
         except Exception:
             continue
@@ -704,7 +722,7 @@ VOLATILITY REGIME:
   {signals['vol_label']}
 
 SESSION CONTEXT:
-  {signals['sess_label']}
+  {signals['sess_label']}{(chr(10) + chr(10) + "ORB SIGNAL:" + chr(10) + "  " + signals['orb_bonus']) if signals.get('orb_bonus') else ""}
 
 SUGGESTED TRADE PARAMETERS (Python math  -  LLM may adjust):
   Stop: {sl_ticks} ticks (${risk_per_contract:.0f}/contract)
@@ -750,6 +768,71 @@ def _calculate_position_size(conviction: str, account_balance: float,
 
     raw = max(1, int(platform_max * conviction_fraction + 0.5))  # +0.5 avoids banker's rounding (e.g. 2.5 -> 3 not 2)
     return min(raw, platform_max)
+
+
+def _check_news_veto() -> str:
+    """
+    NEW-2: Macro Event Gate.
+    Returns a non-empty string (event name) if within 30 min of a high-impact event.
+    Returns '' if safe to trade.
+    Hardcoded 2026 calendar. Update monthly.
+    """
+    now_ct = datetime.now(timezone(timedelta(hours=-5)))
+    # Minutes since midnight CT
+    ct_mins = now_ct.hour * 60 + now_ct.minute
+    today = now_ct.strftime("%Y-%m-%d")
+
+    # High-impact 2026 event schedule (CT times, format: "YYYY-MM-DD": [(hhmm, "Name")])
+    # FOMC: 1:00 PM CT announcement + 1:30 PM press conf
+    # CPI: 7:30 AM CT release
+    # NFP: 7:30 AM CT (first Friday of month)
+    # PPI: 7:30 AM CT
+    EVENTS_2026: Dict[str, list] = {
+        # FOMC decisions (1:00 PM CT)
+        "2026-01-29": [(780, "FOMC Rate Decision")],
+        "2026-03-18": [(780, "FOMC Rate Decision")],
+        "2026-05-07": [(780, "FOMC Rate Decision")],
+        "2026-06-10": [(780, "FOMC Rate Decision")],
+        "2026-07-29": [(780, "FOMC Rate Decision")],
+        "2026-09-16": [(780, "FOMC Rate Decision")],
+        "2026-11-04": [(780, "FOMC Rate Decision")],
+        "2026-12-16": [(780, "FOMC Rate Decision")],
+        # CPI releases (7:30 AM CT)
+        "2026-01-15": [(450, "CPI Release")],
+        "2026-02-11": [(450, "CPI Release")],
+        "2026-03-11": [(450, "CPI Release")],
+        "2026-04-10": [(450, "CPI Release")],
+        "2026-05-13": [(450, "CPI Release")],
+        "2026-06-10": [(450, "CPI Release")],
+        "2026-07-14": [(450, "CPI Release")],
+        "2026-08-12": [(450, "CPI Release")],
+        "2026-09-11": [(450, "CPI Release")],
+        "2026-10-14": [(450, "CPI Release")],
+        "2026-11-12": [(450, "CPI Release")],
+        "2026-12-10": [(450, "CPI Release")],
+        # NFP (first Friday of month, 7:30 AM CT)
+        "2026-01-09": [(450, "NFP Jobs Report")],
+        "2026-02-06": [(450, "NFP Jobs Report")],
+        "2026-03-06": [(450, "NFP Jobs Report")],
+        "2026-04-03": [(450, "NFP Jobs Report")],
+        "2026-05-01": [(450, "NFP Jobs Report")],
+        "2026-06-05": [(450, "NFP Jobs Report")],
+        "2026-07-10": [(450, "NFP Jobs Report")],
+        "2026-08-07": [(450, "NFP Jobs Report")],
+        "2026-09-04": [(450, "NFP Jobs Report")],
+        "2026-10-02": [(450, "NFP Jobs Report")],
+        "2026-11-06": [(450, "NFP Jobs Report")],
+        "2026-12-04": [(450, "NFP Jobs Report")],
+    }
+
+    VETO_WINDOW = 30  # minutes before and after event
+    for event_time_mins, event_name in EVENTS_2026.get(today, []):
+        if abs(ct_mins - event_time_mins) <= VETO_WINDOW:
+            delta = ct_mins - event_time_mins
+            timing = f"{abs(delta)}min {'after' if delta > 0 else 'before'}"
+            return f"{event_name} ({timing})"
+
+    return ""
 
 
 async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -887,8 +970,35 @@ async def _hunt_and_trade(args: Dict[str, Any]) -> Dict[str, Any]:
     # Sort by conviction descending
     all_results.sort(key=lambda x: x["conviction"], reverse=True)
 
+    # ── Step 3b: ORB bonus — boost conviction if price breaks opening range ─────
+    # Uses session high/low as ORB proxy (valid after ORB window closes at 8:45 CT)
+    if best.get("signals") and best.get("snap"):
+        _orb_ctx = best["signals"].get("sess_ctx", "")
+        if _orb_ctx == "power_hour":  # 8:45-10:00 CT — post-ORB breakout window
+            _orb_price = best["snap"].get("price", 0)
+            _orb_high  = best["snap"].get("high_of_session", _orb_price)
+            _orb_low   = best["snap"].get("low_of_session", _orb_price)
+            _orb_range = _orb_high - _orb_low
+            _orb_atr   = best["snap"].get("atr_ticks", 12.0)
+            if _orb_range > 0.3 * _orb_atr:  # range is meaningful (not flat)
+                if best["signal"] == "LONG" and _orb_price >= _orb_high:
+                    best["conviction"] = min(100, best["conviction"] + 8)
+                    best["signals"]["orb_bonus"] = f"ORB BREAKOUT LONG (price at/above {_orb_high:.2f} session high)"
+                elif best["signal"] == "SHORT" and _orb_price <= _orb_low:
+                    best["conviction"] = min(100, best["conviction"] + 8)
+                    best["signals"]["orb_bonus"] = f"ORB BREAKDOWN SHORT (price at/below {_orb_low:.2f} session low)"
+
     # ── Step 4: Decision ────────────────────────────────────────────────────
     phase = _current_session_phase()
+
+    # NEW-2: Macro Event Gate — veto trades within 30 min of high-impact news
+    news_veto = _check_news_veto()
+    if news_veto:
+        return {
+            "action": "NO_TRADE",
+            "reason": f"NEWS VETO: {news_veto}. Wait 30 min after event.",
+            "all_scanned": all_results,
+        }
 
     # TopStep Consistency Rule check (max $2,700/day on $150K/9K target)
     daily_pnl = _get_daily_pnl_from_memory()
